@@ -687,7 +687,17 @@ case "${1:-run}" in
     if ! acquire_lock; then exit 1; fi
     setup_traps
     init_state
-    log_info "Starting orchestrator..."
+    log_info "Starting orchestrator (headless mode)..."
+    main_loop
+    ;;
+  interactive)
+    # Interactive mode: export flag so scripts output prompts instead of spawning Claude
+    export CLAUDE_INTERACTIVE=1
+    if ! acquire_lock; then exit 1; fi
+    setup_traps
+    init_state
+    log_info "Starting orchestrator (interactive mode)..."
+    log_info "Claude tasks will output prompts for current session to execute."
     main_loop
     ;;
   status)
@@ -714,7 +724,14 @@ case "${1:-run}" in
     run_dry_run
     ;;
   *)
-    echo "Usage: $0 {run|status|reset|dry-run}"
+    echo "Usage: $0 {run|interactive|status|reset|dry-run}"
+    echo ""
+    echo "Commands:"
+    echo "  run          Run in headless mode (spawns Claude/Codex subprocesses)"
+    echo "  interactive  Run in interactive mode (outputs prompts for current Claude session)"
+    echo "  status       Show current pipeline state"
+    echo "  reset        Reset pipeline to idle"
+    echo "  dry-run      Validate setup without running"
     exit 1
     ;;
 esac

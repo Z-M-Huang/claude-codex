@@ -4,7 +4,29 @@
 
 1. Create `.task/user-request.txt` with your request
 2. Set state: `./scripts/state-manager.sh set plan_drafting ""`
-3. Run: `./scripts/orchestrator.sh`
+3. Run: `./scripts/orchestrator.sh` (or `./scripts/orchestrator.sh interactive`)
+
+## Execution Modes
+
+### Headless Mode (Default)
+```bash
+./scripts/orchestrator.sh run
+```
+- Spawns Claude and Codex as separate subprocesses
+- Each subprocess runs with its model from `pipeline.config.json`
+- Fully autonomous operation
+
+### Interactive Mode
+```bash
+./scripts/orchestrator.sh interactive
+```
+- Sets `CLAUDE_INTERACTIVE=1` environment variable
+- Claude scripts output prompts instead of spawning subprocesses
+- User executes the prompts in their current Claude Code session
+- Codex scripts still spawn subprocesses (for schema enforcement)
+- Useful for debugging or controlled execution
+
+---
 
 The orchestrator will:
 1. Read `.task/user-request.txt`

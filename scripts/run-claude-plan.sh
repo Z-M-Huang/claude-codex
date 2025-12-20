@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+# Read model from config
+# Merge local config if it exists
+if [[ -f pipeline.config.local.json ]]; then
+  MODEL=$(jq -rs '.[0] * .[1] | .models.coder.model' pipeline.config.json pipeline.config.local.json)
+else
+  MODEL=$(jq -r '.models.coder.model' pipeline.config.json)
+fi
+
 # Load standards and plan
 STANDARDS=$(cat docs/standards.md)
 WORKFLOW=$(cat docs/workflow.md)
@@ -85,8 +93,38 @@ Write your refined plan to .task/plan-refined.json using this format:
 
 Only use needs_clarification for blocking questions that prevent you from creating a sensible plan."
 
-# Execute Claude
+# Check for interactive mode (running inside Claude Code session)
+if [[ "${CLAUDE_INTERACTIVE:-}" == "1" ]]; then
+  echo "=== INTERACTIVE MODE ==="
+  echo "Execute the following task in your current session:"
+  echo ""
+  echo "$PROMPT"
+  echo ""
+
+  # Remove stale output file to ensure fresh output
+  rm -f .task/plan-refined.json
+
+  echo "Waiting for .task/plan-refined.json to be created..."
+  echo "(Press Ctrl+C to abort)"
+
+  # Wait for output file to exist
+  while [[ ! -f .task/plan-refined.json ]]; do
+    sleep 2
+  done
+
+  # Verify it's valid JSON
+  if ! jq empty .task/plan-refined.json 2>/dev/null; then
+    echo "ERROR: .task/plan-refined.json is not valid JSON" >&2
+    exit 1
+  fi
+
+  echo "Output file detected. Continuing..."
+  exit 0
+fi
+
+# Headless mode: Execute Claude subprocess
 claude -p "$PROMPT" \
+  --model "$MODEL" \
   --output-format json \
   --allowedTools "Read,Write,Edit,Glob,Grep" \
   --permission-mode acceptEdits

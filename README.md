@@ -123,6 +123,34 @@ Task → Claude (implement) → Codex (review code) → approved → commit
    ./scripts/orchestrator.sh
    ```
 
+## Execution Modes
+
+The orchestrator supports two execution modes:
+
+### Headless Mode (Default)
+
+Spawns Claude and Codex as subprocesses. Use when running the pipeline autonomously:
+
+```bash
+./scripts/orchestrator.sh run
+# or just
+./scripts/orchestrator.sh
+```
+
+### Interactive Mode
+
+Outputs prompts for the current Claude Code session to execute instead of spawning subprocesses. Use when you want to run the pipeline within an existing Claude Code conversation:
+
+```bash
+./scripts/orchestrator.sh interactive
+```
+
+In interactive mode:
+- Claude tasks output the full prompt for you to execute in your current session
+- You manually run the task and ensure the output file is created
+- Codex tasks still spawn subprocesses (for schema enforcement)
+- Useful for debugging or when you want more control over execution
+
 ### Option B: Adopt for Existing Projects
 
 1. **Copy the pipeline files to your project:**
@@ -217,7 +245,7 @@ your-project/
 │       ├── review-result.schema.json   # Code review output schema
 │       └── plan-review.schema.json     # Plan review output schema
 ├── scripts/
-│   ├── orchestrator.sh       # Main pipeline loop
+│   ├── orchestrator.sh       # Main pipeline loop (run/interactive/status/reset/dry-run)
 │   ├── run-claude.sh         # Claude implementation executor
 │   ├── run-claude-plan.sh    # Claude plan refinement executor
 │   ├── run-claude-plan-create.sh  # Claude plan creation executor
@@ -279,6 +307,14 @@ The pipeline will automatically:
 ```bash
 ./scripts/orchestrator.sh status
 ```
+
+### Run in Interactive Mode
+
+```bash
+./scripts/orchestrator.sh interactive
+```
+
+See [Execution Modes](#execution-modes) above for details.
 
 ### Dry Run (Validation)
 

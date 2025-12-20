@@ -4,6 +4,14 @@ set -e
 # Run Codex to review the refined plan
 # Uses structured output for consistent review format
 
+# Read model from config
+# Merge local config if it exists
+if [[ -f pipeline.config.local.json ]]; then
+  MODEL=$(jq -rs '.[0] * .[1] | .models.reviewer.model' pipeline.config.json pipeline.config.local.json)
+else
+  MODEL=$(jq -r '.models.reviewer.model' pipeline.config.json)
+fi
+
 STANDARDS=$(cat docs/standards.md)
 WORKFLOW=$(cat docs/workflow.md)
 PLAN=$(cat .task/plan-refined.json)
@@ -60,6 +68,7 @@ Decision rules:
 
 # Execute Codex with schema enforcement
 codex exec --full-auto \
+  --model "$MODEL" \
   --output-schema docs/schemas/plan-review.schema.json \
   -o .task/plan-review.json \
   "$PROMPT"

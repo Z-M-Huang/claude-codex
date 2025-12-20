@@ -6,7 +6,16 @@ set -e
 # --output-schema: enforce output matches our review schema
 # -o: write output to file
 
+# Read model from config
+# Merge local config if it exists
+if [[ -f pipeline.config.local.json ]]; then
+  MODEL=$(jq -rs '.[0] * .[1] | .models.reviewer.model' pipeline.config.json pipeline.config.local.json)
+else
+  MODEL=$(jq -r '.models.reviewer.model' pipeline.config.json)
+fi
+
 codex exec --full-auto \
+  --model "$MODEL" \
   --output-schema docs/schemas/review-result.schema.json \
   -o .task/review-result.json \
   "Review the implementation in .task/impl-result.json.

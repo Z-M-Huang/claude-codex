@@ -26,9 +26,18 @@ The pipeline will:
 
 For quick status: ./scripts/orchestrator.sh status
 For recovery: ./scripts/recover.sh
+
+For interactive mode (outputs prompts instead of spawning subprocesses):
+   ./scripts/orchestrator.sh interactive
 ```
 
 Do NOT use the PLAN.md workflow for this project. The orchestrator handles planning, implementation, and review automatically.
+
+### Execution Modes
+
+**Headless mode** (`./scripts/orchestrator.sh run`): Spawns Claude/Codex subprocesses autonomously.
+
+**Interactive mode** (`./scripts/orchestrator.sh interactive`): When `CLAUDE_INTERACTIVE=1` is set, Claude scripts output prompts for you to execute in the current session instead of spawning subprocesses.
 
 ---
 
