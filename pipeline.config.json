@@ -19,12 +19,12 @@
   "models": {
     "orchestrator": {
       "provider": "claude",
-      "model": "claude-opus-4.5",
+      "model": "opus",
       "temperature": 0.7
     },
     "coder": {
       "provider": "claude",
-      "model": "claude-opus-4.5",
+      "model": "opus",
       "temperature": 0.3
     },
     "reviewer": {
