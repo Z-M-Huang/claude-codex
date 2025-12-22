@@ -67,7 +67,9 @@ Decision rules:
 - Only 'suggestion' concerns -> status: approved"
 
 # Execute Codex with schema enforcement
-codex exec --full-auto \
+# resume --last: carry forward context from previous sessions
+codex exec resume --last \
+  --full-auto \
   --model "$MODEL" \
   --output-schema docs/schemas/plan-review.schema.json \
   -o .task/plan-review.json \
