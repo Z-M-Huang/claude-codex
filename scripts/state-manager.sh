@@ -44,6 +44,11 @@ set_state() {
   local new_status="$1"
   local task_id="$2"
 
+  # When starting a new task, clear the Codex session marker for fresh context
+  if [[ "$new_status" == "plan_drafting" ]]; then
+    rm -f .task/.codex-session-active
+  fi
+
   local current_status
   current_status=$(jq -r '.status' "$STATE_FILE")
 
