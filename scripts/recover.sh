@@ -45,6 +45,7 @@ reset_to_idle() {
   rm -f .task/internal-review-sonnet.json .task/internal-review-opus.json
   rm -f .task/security-review-sonnet.json .task/security-review-opus.json
   rm -f .task/test-review-sonnet.json .task/test-review-opus.json
+  rm -f .task/.codex-session-active  # Clear Codex session marker for fresh start
   echo -e "${GREEN}Pipeline reset to idle${NC}"
 }
 
