@@ -29,8 +29,10 @@ fi
 # Get list of changed files for resume prompt
 CHANGED_FILES=""
 if [[ "$IS_RESUME" == true ]]; then
-  # Get modified files from git (unstaged and staged)
-  CHANGED_FILES=$(git diff --name-only HEAD 2>/dev/null || echo "")
+  # Get modified files from git (unstaged and staged) AND untracked files
+  MODIFIED_FILES=$(git diff --name-only HEAD 2>/dev/null || echo "")
+  UNTRACKED_FILES=$(git ls-files --others --exclude-standard 2>/dev/null || echo "")
+  CHANGED_FILES=$(echo -e "${MODIFIED_FILES}\n${UNTRACKED_FILES}" | grep -v '^$' | sort -u | tr '\n' '\n')
   if [[ -z "$CHANGED_FILES" ]]; then
     # If no uncommitted changes, get files from impl-result.json
     if [[ -f .task/impl-result.json ]]; then
