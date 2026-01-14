@@ -2,6 +2,8 @@
 
 A Claude Code plugin marketplace providing multi-AI orchestration tools for planning, implementing, and reviewing code changes.
 
+**Supported Platforms:** Windows, macOS, Linux
+
 ## Installation
 
 ### Step 1: Add Marketplace
@@ -128,7 +130,9 @@ claude-codex/
 
 - [Claude Code](https://claude.ai/code) installed and authenticated
 - [Codex CLI](https://github.com/openai/codex) installed and authenticated (for review-codex skill)
-- [Bun](https://bun.sh/) installed (required by Claude Code, used for JSON processing)
+- [Bun](https://bun.sh/) installed (required by Claude Code, also used for cross-platform JSON processing)
+
+> **Note:** This plugin works on Windows, macOS, and Linux. All shell scripts use Bun for JSON processing instead of `jq`, ensuring cross-platform compatibility out of the box.
 
 ## Configuration
 
