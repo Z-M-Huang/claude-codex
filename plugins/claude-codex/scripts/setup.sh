@@ -57,7 +57,7 @@ save_preference() {
   if [[ -f "$PREFERENCES_FILE" ]]; then
     cp "$PREFERENCES_FILE" "$PREFERENCES_FILE.tmp"
     $JSON_TOOL set "$PREFERENCES_FILE.tmp" "workflow_mode=$mode" "configured_at@=now"
-    mv "$PREFERENCES_FILE.tmp" "$PREFERENCES_FILE"
+    cp "$PREFERENCES_FILE.tmp" "$PREFERENCES_FILE" && rm -f "$PREFERENCES_FILE.tmp"
   else
     cat > "$PREFERENCES_FILE" << EOF
 {

@@ -132,7 +132,7 @@ set_state() {
       "updated_at@=now"
   fi
 
-  mv "${STATE_FILE}.tmp" "$STATE_FILE"
+  cp "${STATE_FILE}.tmp" "$STATE_FILE" && rm -f "${STATE_FILE}.tmp"
 }
 
 # Get previous state (used for error recovery)
@@ -157,14 +157,14 @@ check_state_readable() {
 increment_iteration() {
   cp "$STATE_FILE" "${STATE_FILE}.tmp"
   $JSON_TOOL set "${STATE_FILE}.tmp" "+iteration" "updated_at@=now"
-  mv "${STATE_FILE}.tmp" "$STATE_FILE"
+  cp "${STATE_FILE}.tmp" "$STATE_FILE" && rm -f "${STATE_FILE}.tmp"
 }
 
 # Reset iteration (for new task)
 reset_iteration() {
   cp "$STATE_FILE" "${STATE_FILE}.tmp"
   $JSON_TOOL set "${STATE_FILE}.tmp" "iteration:=0" "started_at@=now" "updated_at@=now"
-  mv "${STATE_FILE}.tmp" "$STATE_FILE"
+  cp "${STATE_FILE}.tmp" "$STATE_FILE" && rm -f "${STATE_FILE}.tmp"
 }
 
 # Note: awaiting_output functions removed - no longer needed with subagent architecture

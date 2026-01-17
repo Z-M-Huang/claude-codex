@@ -231,6 +231,26 @@ Example plugin.json:
 /plugin validate .
 ```
 
+### Skill not working with slash command
+
+When invoking skills from external projects, you must use the full namespaced format:
+
+```bash
+# Correct - use the full namespace
+/claude-codex:multi-ai Add user authentication
+
+# Wrong - bare skill name doesn't work from external projects
+/multi-ai Add user authentication
+```
+
+The bare skill name (e.g., `/multi-ai`) only works within the plugin's internal context. When using the plugin from your own project, always prefix with `claude-codex:`.
+
+**Alternative:** You can also ask Claude naturally without using slash commands:
+
+> "Use the multi-ai pipeline to add user authentication"
+
+Claude will recognize this and invoke the appropriate skill.
+
 ## Documentation
 
 For detailed guides, visit our [Wiki](https://github.com/Z-M-Huang/claude-codex/wiki):
