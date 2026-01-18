@@ -41,7 +41,7 @@ codex exec \
   --full-auto \
   --output-schema "${CLAUDE_PLUGIN_ROOT}/docs/schemas/plan-review.schema.json" \
   -o .task/review-codex.json \
-  "Review the plan in .task/plan-refined.json against ${CLAUDE_PLUGIN_ROOT}/docs/standards.md. Check for completeness, feasibility, and potential issues."
+  "Review the plan in .task/plan-refined.json against ${CLAUDE_PLUGIN_ROOT}/docs/standards.md. Check for completeness, feasibility, and potential issues. If requirements are ambiguous or missing information that cannot be inferred, set needs_clarification: true and provide clarification_questions."
 ```
 
 ## For Code Reviews
@@ -56,12 +56,25 @@ codex exec \
   --full-auto \
   --output-schema "${CLAUDE_PLUGIN_ROOT}/docs/schemas/review-result.schema.json" \
   -o .task/review-codex.json \
-  "Review the implementation in .task/impl-result.json. Check against ${CLAUDE_PLUGIN_ROOT}/docs/standards.md. Identify bugs, security issues, code style violations."
+  "Review the implementation in .task/impl-result.json. Check against ${CLAUDE_PLUGIN_ROOT}/docs/standards.md. Identify bugs, security issues, code style violations. If requirements are ambiguous or behavior is unclear and cannot be inferred from context, set needs_clarification: true and provide clarification_questions."
 ```
 
 ## For Subsequent Reviews
 
-If `.task/.codex-session-active` exists, use resume:
+If `.task/.codex-session-active` exists, use resume. **Branch on review type:**
+
+### Plan Re-Review (no impl-result.json)
+
+```bash
+codex exec \
+  --full-auto \
+  --output-schema "${CLAUDE_PLUGIN_ROOT}/docs/schemas/plan-review.schema.json" \
+  -o .task/review-codex.json \
+  resume --last \
+  "Re-review the plan changes. Previous concerns should be addressed. If requirements are still ambiguous or missing information, set needs_clarification: true and provide clarification_questions."
+```
+
+### Code Re-Review (impl-result.json exists)
 
 ```bash
 codex exec \
@@ -69,17 +82,19 @@ codex exec \
   --output-schema "${CLAUDE_PLUGIN_ROOT}/docs/schemas/review-result.schema.json" \
   -o .task/review-codex.json \
   resume --last \
-  "Re-review the changes. Previous issues should be addressed."
+  "Re-review the code changes. Previous issues should be addressed. If requirements are still ambiguous or behavior unclear, set needs_clarification: true and provide clarification_questions."
 ```
 
 ## After Codex Completes
 
 1. Mark session as active: `touch .task/.codex-session-active`
 2. Read `.task/review-codex.json` to get the result
-3. Report back:
+3. Check for `needs_clarification: true` - if set, the autonomous pipeline will pause for user input
+4. Report back:
    - Review type (plan or code)
    - Status from Codex (approved or needs_changes)
    - Summary of Codex findings
+   - If `needs_clarification`, include the `clarification_questions`
    - Confirm output in `.task/review-codex.json`
 
 ## If Codex Fails

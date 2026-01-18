@@ -61,6 +61,8 @@ Write to `.task/review-sonnet.json`:
   "model": "sonnet",
   "reviewed_at": "ISO8601",
   "summary": "Brief assessment",
+  "needs_clarification": false,
+  "clarification_questions": [],
   "issues": [
     {
       "severity": "error|warning|suggestion",
@@ -79,6 +81,7 @@ Write to `.task/review-sonnet.json`:
 - Any `error` severity → status: `needs_changes`
 - 2+ `warning` severity → status: `needs_changes`
 - Only `suggestion` → status: `approved`
+- **Ambiguous requirements** that cannot be resolved by code analysis → set `needs_clarification: true` and populate `clarification_questions`
 
 ## After Review
 

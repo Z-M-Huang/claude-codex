@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Multi-AI orchestration plugins for Claude Code",
-    "version": "1.0.5"
+    "version": "1.0.6"
   },
   "plugins": [
     {
       "name": "claude-codex",
       "source": "./plugins/claude-codex",
       "description": "Multi-AI orchestration pipeline with sequential review workflow (sonnet → opus → codex)",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "author": {
         "name": "Z-M-Huang"
       },

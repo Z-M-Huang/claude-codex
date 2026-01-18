@@ -9,6 +9,16 @@
       "enum": ["approved", "needs_changes"],
       "description": "Overall plan review decision"
     },
+    "needs_clarification": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, pauses autonomous pipeline to ask user for clarification on ambiguous requirements"
+    },
+    "clarification_questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Questions to ask user when needs_clarification is true"
+    },
     "summary": {
       "type": "string",
       "description": "Brief overall assessment of the plan"

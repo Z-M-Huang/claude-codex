@@ -136,7 +136,7 @@ run_dry_run() {
     if $JSON_TOOL valid "$TASK_DIR/state.json" 2>/dev/null; then
       local status
       status=$($JSON_TOOL get "$TASK_DIR/state.json" ".status // empty")
-      local valid_states="idle plan_drafting plan_refining plan_reviewing implementing reviewing fixing complete error needs_user_input"
+      local valid_states="idle requirements_gathering plan_drafting plan_refining plan_reviewing implementing reviewing fixing complete error needs_user_input"
       if [[ -n "$status" ]] && [[ " $valid_states " =~ " $status " ]]; then
         echo "State file: OK (status: $status)"
       else
@@ -188,6 +188,8 @@ run_dry_run() {
   # 5. Check skills
   local skills_dir="$PLUGIN_ROOT/skills"
   local required_skills=(
+    "multi-ai/SKILL.md"
+    "user-story/SKILL.md"
     "implement-sonnet/SKILL.md"
     "review-sonnet/SKILL.md"
     "review-opus/SKILL.md"
@@ -297,16 +299,29 @@ show_next_action() {
 
   case "$status" in
     idle)
-      echo "Pipeline idle. To start:"
-      echo "  1. Create $TASK_DIR/user-request.txt with your feature request"
-      echo "  2. Run: $PLUGIN_ROOT/scripts/state-manager.sh set plan_drafting \"\""
-      echo "  3. Create $TASK_DIR/plan.json with the initial plan"
+      echo "Pipeline idle. To start, invoke /multi-ai with your request."
+      echo ""
+      echo "The pipeline will:"
+      echo "  1. Gather requirements (interactive - /user-story)"
+      echo "  2. Plan autonomously (no user pauses)"
+      echo "  3. Implement autonomously (no user pauses)"
+      echo "  4. Report results"
+      ;;
+    requirements_gathering)
+      echo "ACTION: Gather and clarify requirements (INTERACTIVE)"
+      echo ""
+      echo "The /user-story skill should be active, asking clarifying questions."
+      echo "Once requirements are approved, the pipeline will proceed autonomously."
+      echo ""
+      echo "If stuck, manually transition:"
+      echo "  $PLUGIN_ROOT/scripts/state-manager.sh set plan_drafting \"\""
       ;;
     plan_drafting)
       echo "ACTION: Create initial plan (main thread)"
       echo ""
-      echo "Task: Create initial plan from user request"
-      echo "Input: $TASK_DIR/user-request.txt"
+      echo "Task: Create initial plan from approved user story"
+      echo "Input: $TASK_DIR/user-story.json (authoritative requirements)"
+      echo "Legacy: $TASK_DIR/user-request.txt (summary only)"
       echo "Output: $TASK_DIR/plan.json"
       echo ""
       echo "After completion, transition state:"
@@ -445,7 +460,7 @@ case "${1:-run}" in
     set_state "idle" ""
     rm -f "$TASK_DIR/impl-result.json" "$TASK_DIR/review-result.json"
     rm -f "$TASK_DIR/plan.json" "$TASK_DIR/plan-refined.json" "$TASK_DIR/plan-review.json"
-    rm -f "$TASK_DIR/current-task.json" "$TASK_DIR/user-request.txt"
+    rm -f "$TASK_DIR/current-task.json" "$TASK_DIR/user-request.txt" "$TASK_DIR/user-story.json"
     rm -f "$TASK_DIR/internal-review-sonnet.json" "$TASK_DIR/internal-review-opus.json"
     rm -f "$TASK_DIR/review-sonnet.json" "$TASK_DIR/review-opus.json" "$TASK_DIR/review-codex.json"
     rm -f "$TASK_DIR/.codex-session-active"  # Clear Codex session marker

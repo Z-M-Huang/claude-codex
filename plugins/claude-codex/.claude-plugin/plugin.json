@@ -1,6 +1,6 @@
 {
   "name": "claude-codex",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Multi-AI orchestration pipeline with sequential review workflow (sonnet → opus → codex)",
   "author": {
     "name": "Z-M-Huang",

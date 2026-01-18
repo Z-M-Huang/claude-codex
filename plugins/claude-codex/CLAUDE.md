@@ -1,6 +1,6 @@
 # Claude Code - Multi-AI Pipeline Project
 
-> **IMPORTANT**: This project uses a skill-based sequential review workflow. The main Claude Code thread handles planning and implementation. Reviews use forked skills (sonnet → opus → codex) that run in isolated contexts.
+> **IMPORTANT**: This project uses an **autonomous pipeline** with skill-based sequential reviews. User interaction happens ONLY during the initial requirements gathering phase. After that, the pipeline runs autonomously, fixing reviewer issues automatically.
 
 ## Path Reference
 
@@ -16,48 +16,41 @@ When this plugin is installed, paths are resolved as follows:
 ## Architecture Overview
 
 ```
-Main Claude Code Thread (Does the Work)
+Multi-AI Pipeline (Autonomous Mode)
   │
-  ├── Planning & Research (main thread)
-  │     ├── Creates initial plan from user request
-  │     └── Refines plan with technical details
+  ├── Phase 1: Requirements Gathering (INTERACTIVE)
+  │     └── /user-story → Clarify requirements, get user approval
   │
-  ├── Implementation Skill:
-  │     └── /implement-sonnet → Writes code (sonnet model, main context)
+  ├── Phase 2: Planning (AUTONOMOUS)
+  │     ├── Create initial plan
+  │     ├── Refine with technical details
+  │     └── Automated review loop (fix issues, no user pauses)
   │
-  └── Review Skills (sequential, forked context):
-        ├── /review-sonnet → Fast review (sonnet model)
-        ├── /review-opus   → Deep review (opus model)
-        └── /review-codex  → Final review (codex)
+  ├── Phase 3: Implementation (AUTONOMOUS)
+  │     ├── /implement-sonnet → Write code
+  │     └── Automated review loop (fix issues, no user pauses)
+  │
+  └── Phase 4: Completion
+        └── Report results to user
 ```
 
 ---
 
 ## When User Asks to Implement Something
 
-Guide users to use the orchestrator workflow:
+Start with `/multi-ai`:
 
 ```
-This project uses a skill-based review workflow.
-
-To implement your request:
-
-1. Create your request:
-   echo "Your feature description here" > .task/user-request.txt
-
-2. Start the pipeline:
-   "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set plan_drafting ""
-   "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator.sh"
+/multi-ai [description of what you want]
+```
 
 The pipeline will:
-- Create and refine a plan (main thread)
-- Sequential reviews: /review-sonnet → /review-opus → /review-codex
-- Implement the code (/implement-sonnet)
-- Sequential reviews: /review-sonnet → /review-opus → /review-codex
+1. **Gather requirements** (interactive) - Ask clarifying questions, get approval
+2. **Plan autonomously** - Create and refine plan, auto-fix review issues
+3. **Implement autonomously** - Write code, auto-fix review issues
+4. **Report results** - Summary of what was done
 
-For status: "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator.sh" status
-For recovery: "${CLAUDE_PLUGIN_ROOT}/scripts/recover.sh"
-```
+**The user only interacts during step 1.** Everything after runs automatically.
 
 ---
 
@@ -65,68 +58,60 @@ For recovery: "${CLAUDE_PLUGIN_ROOT}/scripts/recover.sh"
 
 Located in `skills/` (plugin root level for `/plugin install` support):
 
-| Skill | Purpose | Model |
-|-------|---------|-------|
-| `/implement-sonnet` | Code implementation (main context) | sonnet |
-| `/review-sonnet` | Fast review (forked context) | sonnet |
-| `/review-opus` | Deep review (forked context) | opus |
-| `/review-codex` | Final review via Codex CLI | codex |
+| Skill | Purpose | Model | Phase |
+|-------|---------|-------|-------|
+| `/multi-ai` | Start pipeline (entry point) | - | All |
+| `/user-story` | Gather requirements (interactive) | - | Requirements |
+| `/implement-sonnet` | Code implementation | sonnet | Implementation |
+| `/review-sonnet` | Fast review | sonnet | Review |
+| `/review-opus` | Deep review | opus | Review |
+| `/review-codex` | Final review | codex | Review |
 
-### Sequential Review Flow
+### Automated Review Loop
 
-Reviews run **sequentially** - each model reviews only ONCE per cycle:
-
-```
-sonnet → fix (if needed) → opus → fix (if needed) → codex → fix (restart from sonnet if needed)
-```
-
-**Key benefits**:
-- Each model provides unique perspective without re-reviewing
-- Progressive refinement (fast → deep → final)
-- Token-efficient (forked context isolation)
-
-### Invoking Review Skills
-
-Simply invoke the skill by name:
+Reviews run **automatically** without user pauses:
 
 ```
-/review-sonnet
-/review-opus
-/review-codex
+LOOP until all reviews pass (or max loops reached):
+  │
+  ├── /review-sonnet → If issues, FIX them automatically
+  ├── /review-opus   → If issues, FIX them automatically
+  └── /review-codex  → If approved: DONE
+                       If issues: FIX and restart loop
 ```
 
-Skills auto-detect whether to review plan or code based on:
-- Plan review: `.task/plan-refined.json` exists, no `.task/impl-result.json`
-- Code review: `.task/impl-result.json` exists
+**Key change from semi-autonomous mode:**
+- NO user confirmation between reviews
+- Issues are fixed automatically
+- Only pause when truly stuck (ambiguity, exceeded limits, unrecoverable errors)
 
-### Review Outputs
+### When Pipeline Pauses
 
-| File | Skill |
-|------|-------|
-| `.task/review-sonnet.json` | /review-sonnet |
-| `.task/review-opus.json` | /review-opus |
-| `.task/review-codex.json` | /review-codex |
+The pipeline ONLY pauses for user input when:
+
+1. **needs_clarification** - Missing information that requires user decision
+2. **review_loop_exceeded** - Exceeded max review cycles (configurable)
+3. **unrecoverable_error** - Build failures, missing deps that can't be auto-resolved
 
 ---
 
-## State Machine (Simplified)
+## State Machine
 
 ```
 idle
   ↓
-plan_drafting (main thread creates plan)
+requirements_gathering (/user-story - INTERACTIVE)
+  │  Ask questions, get user approval
+  ↓ [approved]
+plan_drafting (create initial plan)
   ↓
-plan_refining (main thread refines + sequential skill reviews)
-  │
-  │  Review cycle: sonnet → opus → codex
-  │  If codex needs_changes: restart from sonnet
-  │
+plan_refining (refine + AUTOMATED review loop)
+  │  sonnet → fix → opus → fix → codex
+  │  Loop until approved (no user pauses)
   ↓ [all approved]
-implementing (/implement-sonnet + sequential skill reviews)
-  │
-  │  Review cycle: sonnet → opus → codex
-  │  If codex needs_changes: restart from sonnet
-  │
+implementing (/implement-sonnet + AUTOMATED review loop)
+  │  sonnet → fix → opus → fix → codex
+  │  Loop until approved (no user pauses)
   ↓ [all approved]
 complete
 ```
@@ -142,6 +127,31 @@ Read these docs before any work:
 ---
 
 ## Output Formats
+
+### User Story Output
+Write to: `.task/user-story.json`
+
+```json
+{
+  "id": "story-YYYYMMDD-HHMMSS",
+  "title": "Short descriptive title",
+  "original_request": "The user's original request text",
+  "requirements": {
+    "functional": ["req1", "req2"],
+    "technical": ["tech1", "tech2"],
+    "acceptance_criteria": ["criterion1", "criterion2"]
+  },
+  "scope": {
+    "in_scope": ["item1", "item2"],
+    "out_of_scope": ["item1", "item2"]
+  },
+  "clarifications": [
+    {"question": "Q1?", "answer": "A1"}
+  ],
+  "approved_at": "ISO8601",
+  "approved_by": "user"
+}
+```
 
 ### Plan Creation Output
 Write to: `.task/plan.json`
@@ -195,53 +205,69 @@ Write to: `.task/impl-result.json`
 
 ---
 
-## Review Handling
+## Review Handling (Autonomous)
 
-### Sequential Review Process
+### Automated Review Process
 
-For both planning and implementation phases:
+For both planning and implementation phases, the review loop runs **automatically**:
 
 1. **Invoke /review-sonnet**
-   - If `needs_changes`: fix issues, continue to step 2
+   - If `needs_changes`: FIX issues automatically, continue to step 2
    - If `approved`: continue to step 2
 
 2. **Invoke /review-opus**
-   - If `needs_changes`: fix issues, continue to step 3
+   - If `needs_changes`: FIX issues automatically, continue to step 3
    - If `approved`: continue to step 3
 
 3. **Invoke /review-codex**
-   - If `needs_changes`: fix issues, **restart from step 1**
    - If `approved`: proceed to next phase
+   - If `needs_changes`: FIX issues automatically, **restart from step 1**
 
-### Why Sequential?
+### Auto-Fix Rules
 
-- Skills run in forked context (token-efficient)
-- Each model reviews ONCE per cycle (no redundant re-reviews)
-- Progressive refinement catches issues at appropriate depth
+When fixing reviewer feedback:
+- Accept ALL feedback without debate
+- Fix root causes, not symptoms
+- Run tests after code changes
+- Update documentation if architecture changes
+- Don't introduce new issues while fixing
 
 ---
 
 ## Strict Loop-Until-Pass Model
 
-- Reviews loop until all three approve
+- Reviews loop until all three approve (or max loops reached)
 - No debate mechanism - accept all review feedback
 - Fix ALL issues raised by any reviewer
 - Codex rejection restarts the full review cycle
+- **No user pauses** - only pause for genuine blockers
 
 ---
 
-## Asking for Clarification
+## Configuration
 
-If a plan or task is too ambiguous, add to your output:
+See `pipeline.config.json` for settings:
 
 ```json
 {
-  "needs_clarification": true,
-  "questions": [
-    "Question 1 for the user?",
-    "Question 2 for the user?"
-  ]
+  "autonomy": {
+    "mode": "autonomous",
+    "approvalPoints": {
+      "userStory": true,
+      "planning": false,
+      "implementation": false,
+      "review": false,
+      "commit": true
+    },
+    "pauseOnlyOn": ["needs_clarification", "review_loop_exceeded", "unrecoverable_error"],
+    "reviewLoopLimit": 10,
+    "planReviewLoopLimit": 10,
+    "codeReviewLoopLimit": 15
+  }
 }
 ```
 
-The orchestrator will transition to `needs_user_input` state.
+**Config field usage:**
+- `approvalPoints` - Documents which phases require user approval (enforced by skill instructions)
+- `pauseOnlyOn` - Lists conditions that pause autonomous execution (checked in multi-ai skill)
+- `planReviewLoopLimit` / `codeReviewLoopLimit` - Phase-specific loop limits (read by multi-ai skill)

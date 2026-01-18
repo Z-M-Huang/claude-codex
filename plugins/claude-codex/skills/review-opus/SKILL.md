@@ -65,6 +65,8 @@ Write to `.task/review-opus.json`:
   "model": "opus",
   "reviewed_at": "ISO8601",
   "summary": "Deep assessment",
+  "needs_clarification": false,
+  "clarification_questions": [],
   "issues": [
     {
       "severity": "error|warning|suggestion",
@@ -87,6 +89,7 @@ Write to `.task/review-opus.json`:
 - Poor test quality → status: `needs_changes`
 - 2+ `warning` → status: `needs_changes`
 - Only `suggestion` → status: `approved`
+- **Ambiguous requirements** that cannot be resolved by code analysis → set `needs_clarification: true` and populate `clarification_questions`
 
 ## After Review
 

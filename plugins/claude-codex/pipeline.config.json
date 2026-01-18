@@ -1,9 +1,10 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
 
   "autonomy": {
-    "mode": "semi-autonomous",
+    "mode": "autonomous",
     "approvalPoints": {
+      "userStory": true,
       "planning": false,
       "implementation": false,
       "review": false,
@@ -12,7 +13,8 @@
     "maxAutoRetries": 3,
     "reviewLoopLimit": 10,
     "planReviewLoopLimit": 10,
-    "codeReviewLoopLimit": 15
+    "codeReviewLoopLimit": 15,
+    "pauseOnlyOn": ["needs_clarification", "review_loop_exceeded", "unrecoverable_error"]
   },
 
   "models": {
