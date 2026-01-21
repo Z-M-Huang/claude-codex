@@ -1,8 +1,13 @@
 # Claude Codex Marketplace
 
-A Claude Code plugin marketplace providing multi-AI orchestration tools for planning, implementing, and reviewing code changes.
+![GitHub release](https://img.shields.io/github/v/release/Z-M-Huang/claude-codex?style=flat-square)
+![GitHub license](https://img.shields.io/github/license/Z-M-Huang/claude-codex?style=flat-square)
+![GitHub last commit](https://img.shields.io/github/last-commit/Z-M-Huang/claude-codex?style=flat-square)
+![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white)
+![macOS](https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black)
 
-**Supported Platforms:** Windows, macOS, Linux
+A Claude Code plugin marketplace providing multi-AI orchestration tools for planning, implementing, and reviewing code changes.
 
 > **New to Claude Codex?** Check out our [comprehensive Wiki](https://github.com/Z-M-Huang/claude-codex/wiki) for beginner-friendly guides and tutorials.
 
