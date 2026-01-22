@@ -300,4 +300,11 @@ For detailed guides, visit our [Wiki](https://github.com/Z-M-Huang/claude-codex/
 
 ## License
 
-GPL-3.0 license
+GPL-3.0 with attribution requirement.
+
+If you use, modify, or distribute this software, please provide attribution to:
+- **Author:** Z-M-Huang
+- **Project:** Claude Codex
+- **Repository:** https://github.com/Z-M-Huang/claude-codex
+
+See [LICENSE](LICENSE) for full terms.
