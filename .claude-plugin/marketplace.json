@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Multi-AI orchestration plugins for Claude Code with TDD-driven Ralph Loop",
-    "version": "1.1.0"
+    "version": "1.1.1"
   },
   "plugins": [
     {
       "name": "claude-codex",
       "source": "./plugins/claude-codex",
       "description": "Multi-AI orchestration pipeline with TDD-driven Ralph Loop (sonnet → opus → codex)",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": {
         "name": "Z-M-Huang"
       },

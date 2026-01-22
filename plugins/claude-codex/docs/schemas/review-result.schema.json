@@ -132,6 +132,6 @@
       "additionalProperties": false
     }
   },
-  "required": ["status", "summary", "issues", "checklist"],
+  "required": ["status", "needs_clarification", "clarification_questions", "summary", "issues", "checklist"],
   "additionalProperties": false
 }

@@ -260,7 +260,7 @@ The hook:
 
 ```json
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "autonomy": {
     "mode": "ralph-loop",
     "approvalPoints": {

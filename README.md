@@ -80,7 +80,7 @@ After installation, use skills with the plugin namespace:
 
 Multi-AI orchestration pipeline with **TDD-driven Ralph Loop** (sonnet → opus → codex).
 
-**New in v1.1.0:** Ralph Loop mode - implementation phase automatically iterates until all tests pass AND all reviews approve. No more manual intervention!
+**New in v1.1.1:** Ralph Loop mode - implementation phase automatically iterates until all tests pass AND all reviews approve. No more manual intervention!
 
 **Skills included:**
 

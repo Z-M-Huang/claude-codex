@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Plan Review Result",
   "type": "object",
-  "required": ["status", "summary", "concerns", "reviewed_by", "reviewed_at"],
+  "required": ["status", "needs_clarification", "clarification_questions", "summary", "concerns", "reviewed_by", "reviewed_at"],
   "properties": {
     "status": {
       "type": "string",
