@@ -4,24 +4,24 @@
     "name": "Z-M-Huang"
   },
   "metadata": {
-    "description": "Multi-AI orchestration plugins for Claude Code",
-    "version": "1.0.9"
+    "description": "Multi-AI orchestration plugins for Claude Code with TDD-driven Ralph Loop",
+    "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "claude-codex",
       "source": "./plugins/claude-codex",
-      "description": "Multi-AI orchestration pipeline with sequential review workflow (sonnet → opus → codex)",
-      "version": "1.0.9",
+      "description": "Multi-AI orchestration pipeline with TDD-driven Ralph Loop (sonnet → opus → codex)",
+      "version": "1.1.0",
       "author": {
         "name": "Z-M-Huang"
       },
       "homepage": "https://github.com/Z-M-Huang/claude-codex",
       "repository": "https://github.com/Z-M-Huang/claude-codex",
       "license": "MIT",
-      "keywords": ["multi-ai", "code-review", "orchestration", "pipeline"],
+      "keywords": ["multi-ai", "code-review", "orchestration", "pipeline", "ralph-loop", "tdd"],
       "category": "development",
-      "tags": ["ai", "review", "automation", "pipeline"],
+      "tags": ["ai", "review", "automation", "pipeline", "tdd"],
       "skills": "./skills/"
     }
   ]

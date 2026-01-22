@@ -78,17 +78,21 @@ After installation, use skills with the plugin namespace:
 
 ### claude-codex
 
-Multi-AI orchestration pipeline with sequential review workflow (sonnet → opus → codex).
+Multi-AI orchestration pipeline with **TDD-driven Ralph Loop** (sonnet → opus → codex).
+
+**New in v1.1.0:** Ralph Loop mode - implementation phase automatically iterates until all tests pass AND all reviews approve. No more manual intervention!
 
 **Skills included:**
 
 | Skill              | Model             | Purpose                                     |
 | ------------------ | ----------------- | ------------------------------------------- |
 | `multi-ai`         | -                 | Pipeline entry point (starts full workflow) |
+| `user-story`       | -                 | Gather requirements + TDD criteria          |
 | `implement-sonnet` | Claude Sonnet 4.5 | Code implementation with main context       |
 | `review-sonnet`    | Claude Sonnet 4.5 | Fast review (code + security + tests)       |
 | `review-opus`      | Claude Opus 4.5   | Deep review (architecture + subtle issues)  |
 | `review-codex`     | Codex CLI         | Final review via OpenAI Codex               |
+| `cancel-loop`      | -                 | Emergency stop for Ralph Loop               |
 
 ## Recommended Subscriptions
 
@@ -107,26 +111,38 @@ Multi-AI orchestration pipeline with sequential review workflow (sonnet → opus
 
 This command:
 
-1. Cleans up previous task files
-2. Creates and refines a plan
-3. Runs sequential reviews (sonnet → opus → codex)
-4. Implements the code
-5. Runs sequential reviews (sonnet → opus → codex)
-6. Marks complete
+1. **Requirements** (interactive) - Gathers requirements + TDD test criteria
+2. **Planning** (semi-interactive) - Creates plan, only asks if conflicts detected
+3. **Implementation** (Ralph Loop) - Iterates until tests pass + reviews approve
+4. **Complete** - Reports results
 
-### Sequential Review Flow
+### Ralph Loop: TDD-Driven Implementation
 
-Reviews run **sequentially** - each model reviews only ONCE per cycle:
+The implementation phase uses the **Ralph Wiggum technique** - an autonomous iteration loop:
 
 ```
-Plan/Code → review-sonnet → fix → review-opus → fix → review-codex → fix (restart)
+┌──────────────────────────────────────────┐
+│  RALPH LOOP (until max iterations)       │
+│  ┌────────────────────────────────────┐  │
+│  │ 1. Implement/fix code              │  │
+│  │ 2. Review (sonnet → opus → codex)  │  │
+│  │ 3. Run tests                       │  │
+│  │                                    │  │
+│  │ IF all reviews pass AND tests pass │  │
+│  │    → EXIT with completion promise  │  │
+│  │ ELSE                               │  │
+│  │    → continue loop                 │  │
+│  └────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
 ```
 
 **Key benefits:**
 
-- Each model provides unique perspective without re-reviewing
-- Progressive refinement (fast → deep → final)
-- Token-efficient (forked context isolation)
+- **Autonomous iteration** - No manual intervention needed
+- **TDD completion** - Tests define "done"
+- **Multi-AI review** - Every iteration gets reviewed by all three models
+- **Safety limits** - Max iterations prevents infinite loops
+- **Cancel anytime** - `/cancel-loop` for emergency stop
 
 ## Marketplace Structure
 

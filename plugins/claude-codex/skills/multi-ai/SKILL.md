@@ -1,20 +1,37 @@
 ---
 name: multi-ai
-description: Start the multi-AI pipeline with a given request. Cleans up old task files and guides through plan → review → implement → review workflow.
+description: Start the multi-AI pipeline with TDD-driven ralph loop. Plan → Review → Implement (loop until tests pass + reviews approve).
 plugin-scoped: true
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Skill, AskUserQuestion
 ---
 
-# Multi-AI Pipeline Command (Autonomous Mode)
+# Multi-AI Pipeline with Ralph Loop
 
-You are starting the multi-AI pipeline in **autonomous mode**. This means:
-
-1. **User interaction happens FIRST** during requirements gathering
-2. **Everything after is automated** - no pauses between reviews
-3. **Only pause for**: `needs_clarification`, review loop exceeded, or unrecoverable errors
+This pipeline combines human-guided planning with autonomous TDD-driven implementation using the Ralph Wiggum technique.
 
 **Scripts location:** `${CLAUDE_PLUGIN_ROOT}/scripts/`
 **Task directory:** `${CLAUDE_PROJECT_DIR}/.task/`
+
+---
+
+## Pipeline Overview
+
+```
+Phase 1: Requirements (INTERACTIVE)
+├── /user-story gathers requirements + TDD criteria
+└── User approves
+
+Phase 2: Planning (SEMI-INTERACTIVE)
+├── Create plan with test commands, mode, risk assessment
+├── Review loop for plan (autonomous)
+└── Prompt user ONLY if clarification needed or conflicts detected
+
+Phase 3: Implementation
+├── IF simple mode → implement + single review cycle
+└── IF ralph-loop mode → iterate until tests pass + reviews approve
+
+Phase 4: Complete
+```
 
 ---
 
@@ -28,179 +45,280 @@ You are starting the multi-AI pipeline in **autonomous mode**. This means:
 
 ### Step 2: Set State and Gather Requirements
 
-Set the state to requirements_gathering before invoking /user-story:
-
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set requirements_gathering ""
 ```
 
-**Invoke /user-story** to interactively gather and clarify requirements with the user.
+**Invoke /user-story** to interactively gather:
+- Functional requirements
+- Technical requirements
+- Acceptance criteria
+- **TDD criteria** (test commands, success patterns)
+- **Implementation mode** (simple or ralph-loop)
+- **Max iterations** (default 10)
 
-This skill will:
-- Ask clarifying questions
-- Resolve ambiguities
-- Get user approval on requirements
-- Write `.task/user-story.json` and `.task/user-request.txt`
-
-**WAIT** for user approval before continuing. This is the only interactive phase.
+**WAIT** for user approval before continuing.
 
 ---
 
-## Phase 2: Autonomous Planning
+## Phase 2: Planning (Semi-Interactive)
 
-Once requirements are approved, proceed autonomously.
-
-### Step 3: Set State and Create Plan
+### Step 3: Create Initial Plan
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set plan_drafting ""
 ```
 
-Create `.task/plan.json` based on the approved user story:
-- `id`: "plan-YYYYMMDD-HHMMSS"
-- `title`: From user story
-- `description`: From user story requirements
-- `requirements`: From user story functional requirements
-- `created_at`: ISO8601 timestamp
-- `created_by`: "claude"
+Create `.task/plan.json` based on the approved user story.
 
-### Step 4: Refine Plan
+### Step 4: Refine Plan with Risk Assessment
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set plan_refining "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan.json .id)"
 ```
 
 Research the codebase and create `.task/plan-refined.json` with:
-- Technical approach
-- Files to modify/create
-- Potential challenges
 
-### Step 5: Automated Plan Review Loop
+```json
+{
+  "id": "plan-YYYYMMDD-HHMMSS",
+  "title": "Feature title",
+  "description": "What the user wants",
+  "requirements": ["req 1", "req 2"],
+  "technical_approach": "How to implement",
+  "files_to_modify": ["path/to/file.ts"],
+  "files_to_create": ["path/to/new.ts"],
+  "implementation": {
+    "mode": "ralph-loop",
+    "max_iterations": 10,
+    "skill": "implement-sonnet"
+  },
+  "test_plan": {
+    "commands": ["npm test", "npm run lint"],
+    "success_pattern": "passed|✓",
+    "run_after_review": true
+  },
+  "risk_assessment": {
+    "infinite_loop_risks": [
+      "Risk: Linter auto-fix may conflict with reviewer style preferences"
+    ],
+    "conflicts_detected": [],
+    "requires_user_decision": false
+  },
+  "completion_promise": "<promise>IMPLEMENTATION_COMPLETE</promise>",
+  "refined_by": "claude",
+  "refined_at": "ISO8601"
+}
+```
 
-Run the automated review loop (see "Automated Review Loop" section below).
+### Step 5: Risk Assessment Check
 
-**DO NOT** wait for user confirmation between reviews. Fix issues automatically and continue.
+Before proceeding, analyze for potential infinite loop risks:
+
+**Check for conflicts:**
+1. **Test vs Review conflicts**: Does the test require something reviews might reject?
+2. **Linter vs Style conflicts**: Do auto-fixes conflict with coding standards?
+3. **Missing infrastructure**: Are test dependencies available?
+4. **Circular dependencies**: Could fixes create new review issues?
+
+**IF `risk_assessment.requires_user_decision` is true:**
+- Use `AskUserQuestion` to present the risks
+- Get user decision on how to proceed
+- Update plan based on user input
+
+**OTHERWISE:** Proceed autonomously.
+
+### Step 6: Plan Review Loop (Autonomous)
+
+Run the review loop for the plan:
+
+```
+LOOP_COUNT = 0
+MAX_LOOPS = planReviewLoopLimit from config (default: 10)
+
+WHILE LOOP_COUNT < MAX_LOOPS:
+    1. INVOKE /review-sonnet (plan mode)
+    2. INVOKE /review-opus (plan mode)
+    3. INVOKE /review-codex (plan mode)
+
+    IF all approved → BREAK
+    IF needs_changes → FIX and continue
+    IF needs_clarification → ASK user, then continue
+
+    LOOP_COUNT += 1
+```
 
 ---
 
-## Phase 3: Autonomous Implementation
+## Phase 3: Implementation
 
-### Step 6: Implement
+### Step 7: Check Implementation Mode
+
+Read the implementation mode from `.task/plan-refined.json`:
+
+```bash
+MODE=$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .implementation.mode)
+```
+
+### IF mode == "simple": Single Implementation Cycle
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set implementing "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .id)"
 ```
 
-**Invoke /implement-sonnet** to implement the approved plan.
+1. **Invoke /implement-sonnet**
+2. Run single review cycle (sonnet → opus → codex)
+3. Run tests
+4. If all pass → complete
+5. If issues → fix once, then complete (no loop)
 
-### Step 7: Automated Code Review Loop
+### IF mode == "ralph-loop": TDD Ralph Loop
 
-Run the automated review loop (see "Automated Review Loop" section below).
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set implementing_loop "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .id)"
+```
 
-**DO NOT** wait for user confirmation between reviews. Fix issues automatically and continue.
+**Initialize loop state:**
+
+Write `.task/loop-state.json`:
+```json
+{
+  "active": true,
+  "iteration": 0,
+  "max_iterations": 10,
+  "completion_promise": "<promise>IMPLEMENTATION_COMPLETE</promise>",
+  "plan_path": ".task/plan-refined.json",
+  "started_at": "ISO8601"
+}
+```
+
+**Execute the Ralph Loop:**
+
+The stop hook (`hooks/implementation-stop-hook.js`) will intercept exit attempts and verify:
+
+1. **Check review files**: Read existing `.task/review-*.json` files for status
+2. **Run test commands** from plan (in project directory)
+3. **Verify completion criteria**:
+   - All review files have status == "approved"
+   - All test commands pass (exit code from config, default 0)
+   - Success/failure patterns match (if defined in plan)
+
+**IMPORTANT:** The hook READS review files - it does NOT run the review skills.
+You must invoke `/review-sonnet`, `/review-opus`, `/review-codex` yourself before attempting to exit.
+
+**IF criteria met:**
+- Output: `<promise>IMPLEMENTATION_COMPLETE</promise>`
+- Hook allows exit
+
+**IF criteria NOT met:**
+- Hook blocks exit
+- Re-feeds the implementation prompt:
+  ```
+  Continue implementing based on the plan at .task/plan-refined.json
+
+  Previous iteration: [N] of [MAX]
+  Review status: [summary of issues]
+  Test status: [pass/fail summary]
+
+  Fix the issues and try again.
+  Output <promise>IMPLEMENTATION_COMPLETE</promise> when:
+  - All reviews pass (sonnet, opus, codex approve)
+  - All tests pass (exit code 0)
+  ```
+
+**Loop continues until:**
+- Completion promise detected AND tests pass AND reviews pass
+- OR max iterations reached (pause and ask user)
 
 ---
 
 ## Phase 4: Completion
 
-### Step 8: Mark Complete
+### Step 8: Clean Up Loop State
 
 ```bash
+rm -f .task/loop-state.json
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set complete "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .id)"
 ```
 
-Report success to the user with a summary of:
+### Step 9: Report Results
+
+Report to user:
 - What was implemented
 - Files changed
-- Tests added
-- Any notes or follow-up items
+- Tests added/modified
+- Review iterations taken
+- Final test results
 
 ---
 
-## Automated Review Loop
+## Ralph Loop Details
 
-This is the core automation. Execute reviews sequentially, fixing issues automatically.
+### How the Stop Hook Works
 
-**Read limits from `${CLAUDE_PLUGIN_ROOT}/pipeline.config.json`:**
-- For **Plan Reviews**: use `autonomy.planReviewLoopLimit` (default: 10)
-- For **Code Reviews**: use `autonomy.codeReviewLoopLimit` (default: 15)
+When Claude tries to exit during `implementing_loop` state:
 
-```
-LOOP_COUNT = 0
-MAX_LOOPS = <phase-specific limit from config>
+1. Hook reads `.task/loop-state.json`
+2. If `active: false` or missing → allow exit
+3. If `iteration >= max_iterations` → allow exit, warn user
+4. Otherwise:
+   - **Read** existing review files (`.task/review-*.json`)
+   - **Run** test commands from plan (changes to project directory first)
+   - Check success/failure patterns from plan config
+   - Check if completion criteria met
+   - If met → allow exit
+   - If not → increment iteration, block exit, return prompt
 
-WHILE LOOP_COUNT < MAX_LOOPS:
+**Note:** The hook does NOT invoke review skills - it only reads the review result files. You must run the reviews yourself before attempting to exit.
 
-    1. INVOKE /review-sonnet
-       READ .task/review-sonnet.json
-       IF status == "needs_changes":
-           FIX all issues listed in the review
-           (update plan or code as appropriate)
+### Completion Criteria
 
-    2. INVOKE /review-opus
-       READ .task/review-opus.json
-       IF status == "needs_changes":
-           FIX all issues listed in the review
+All must be true:
+1. `.task/review-sonnet.json` status == "approved"
+2. `.task/review-opus.json` status == "approved"
+3. `.task/review-codex.json` status == "approved"
+4. All test commands from plan exit with code 0
 
-    3. INVOKE /review-codex
-       READ .task/review-codex.json
-       IF status == "approved":
-           BREAK (exit loop - all reviews passed)
-       IF status == "needs_changes":
-           FIX all issues listed in the review
-           LOOP_COUNT += 1
-           CONTINUE (restart from sonnet)
+### Safety Mechanisms
 
-    IF any review has needs_clarification == true:
-        PAUSE and ask user (use AskUserQuestion)
-        After user responds, continue loop
-
-IF LOOP_COUNT >= MAX_LOOPS:
-    PAUSE - inform user review loop exceeded limit
-    Ask if they want to continue or abort
-```
-
-### Key Rules for Automated Fixes
-
-1. **Accept ALL reviewer feedback** - no debate, just fix
-2. **Fix thoroughly** - address root causes, not just symptoms
-3. **Don't introduce new issues** while fixing
-4. **Run tests after code fixes** if tests exist
-5. **Update plan documentation** if architecture changes
-
-### When to Pause (Exceptions)
-
-Only pause the autonomous flow when one of the conditions in `autonomy.pauseOnlyOn` from `pipeline.config.json` is met:
-
-1. **needs_clarification**: A reviewer sets `needs_clarification: true` with questions that require user input
-2. **review_loop_exceeded**: Exceeded the phase-specific loop limit without approval
-3. **unrecoverable_error**: Build failures, missing dependencies, etc. that can't be auto-resolved
-
-For these cases, use `AskUserQuestion` to get user input, then continue.
+1. **Max iterations**: Hard limit (default 10, user configurable)
+2. **Conflict detection**: Planning phase flags potential infinite loops
+3. **Cancel command**: `/cancel-loop` to abort at any time
+4. **State file**: Remove `.task/loop-state.json` to stop loop
 
 ---
 
 ## Important Rules
 
-- **Autonomous by default**: Don't ask for confirmation between steps
-- **Fix and continue**: When reviewers find issues, fix them and keep going
-- **Only pause when truly stuck**: Ambiguity, decisions, or exceeded limits
-- **Inform, don't ask**: Tell the user what you're doing, don't ask if you should do it
-- **Complete the full cycle**: Don't stop until complete or legitimately blocked
+1. **Semi-interactive planning**: Only ask user when genuinely needed
+2. **Autonomous implementation**: Ralph loop handles iteration automatically
+3. **Review before test**: Always run reviews first, then tests
+4. **Accept all feedback**: No debate with reviewers, just fix
+5. **Clear completion criteria**: Tests pass + reviews approve
 
 ---
 
 ## Progress Reporting
 
-While running autonomously, provide brief status updates:
-
 ```
-Planning phase complete. Starting plan reviews...
-✓ Sonnet review: approved
-✓ Opus review: 2 issues found, fixing...
-✓ Opus review: approved (after fixes)
-✓ Codex review: approved
-Plan approved. Starting implementation...
-```
+Requirements approved. Starting planning...
+✓ Plan created
+✓ Risk assessment: No conflicts detected
+✓ Plan reviews: approved (2 iterations)
 
-This keeps the user informed without requiring their input.
+Starting implementation (ralph-loop mode, max 10 iterations)...
+Iteration 1:
+  ✓ Implementation complete
+  ✗ Sonnet review: 2 issues
+  - Fixing issues...
+Iteration 2:
+  ✓ Fixes applied
+  ✓ Sonnet review: approved
+  ✓ Opus review: approved
+  ✓ Codex review: approved
+  ✓ Tests: 5 passed, 0 failed
+
+<promise>IMPLEMENTATION_COMPLETE</promise>
+
+✓ Complete! Feature implemented in 2 iterations.
+```

@@ -178,6 +178,29 @@ The feature will be complete when:
 Are these the right success criteria?
 ```
 
+**Chunk 5: Test-Driven Completion (TDD Criteria)**
+```
+## Test Plan
+
+To verify the implementation is complete, we'll run:
+
+**Test Commands:**
+- `[test command 1]` - [what it verifies]
+- `[test command 2]` - [what it verifies]
+
+**Success Indicators:**
+- All tests pass (exit code 0)
+- [Additional success criteria like coverage threshold]
+
+**Implementation Mode:**
+- [ ] Simple (single implementation + review cycle)
+- [x] Ralph Loop (iterative until tests pass + reviews approve)
+
+**Max Iterations:** 10 (safety limit for ralph loop)
+
+Does this test plan look right? Any commands to add or remove?
+```
+
 **Ask clarifying questions** during any chunk if something is unclear. You can loop back to previous chunks if needed.
 
 ### Step 5: Final Approval
@@ -223,6 +246,16 @@ Once approved, write to `.task/user-story.json`:
   "scope": {
     "in_scope": ["item1", "item2"],
     "out_of_scope": ["item1", "item2"]
+  },
+  "test_criteria": {
+    "commands": ["npm test", "npm run lint"],
+    "success_pattern": "passed|✓|All tests passed",
+    "failure_pattern": "FAILED|Error|failed"
+  },
+  "implementation": {
+    "mode": "ralph-loop",
+    "max_iterations": 10,
+    "skill": "implement-sonnet"
   },
   "clarifications": [
     {"question": "Q1?", "answer": "A1"},

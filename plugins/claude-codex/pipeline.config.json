@@ -1,8 +1,8 @@
 {
-  "version": "1.0.9",
+  "version": "1.1.0",
 
   "autonomy": {
-    "mode": "autonomous",
+    "mode": "ralph-loop",
     "approvalPoints": {
       "userStory": true,
       "planning": false,
@@ -14,7 +14,14 @@
     "reviewLoopLimit": 10,
     "planReviewLoopLimit": 10,
     "codeReviewLoopLimit": 15,
-    "pauseOnlyOn": ["needs_clarification", "review_loop_exceeded", "unrecoverable_error"]
+    "pauseOnlyOn": ["needs_clarification", "review_loop_exceeded", "conflicts_detected", "unrecoverable_error"]
+  },
+
+  "ralphLoop": {
+    "defaultMode": "ralph-loop",
+    "defaultMaxIterations": 10,
+    "completionPromise": "<promise>IMPLEMENTATION_COMPLETE</promise>",
+    "testSuccessExitCode": 0
   },
 
   "models": {

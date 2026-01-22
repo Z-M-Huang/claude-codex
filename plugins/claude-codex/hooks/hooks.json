@@ -1,0 +1,15 @@
+{
+  "description": "Claude Codex implementation loop stop hook for TDD-driven ralph loop",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ${CLAUDE_PLUGIN_ROOT}/hooks/implementation-stop-hook.js"
+          }
+        ]
+      }
+    ]
+  }
+}

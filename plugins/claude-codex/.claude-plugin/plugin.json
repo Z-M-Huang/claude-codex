@@ -1,7 +1,7 @@
 {
   "name": "claude-codex",
-  "version": "1.0.9",
-  "description": "Multi-AI orchestration pipeline with sequential review workflow (sonnet → opus → codex)",
+  "version": "1.1.0",
+  "description": "Multi-AI orchestration pipeline with TDD-driven Ralph Loop (sonnet → opus → codex)",
   "author": {
     "name": "Z-M-Huang",
     "url": "https://github.com/Z-M-Huang"
@@ -16,7 +16,9 @@
     "pipeline",
     "sonnet",
     "opus",
-    "codex"
+    "codex",
+    "ralph-loop",
+    "tdd"
   ],
   "skills": "./skills/"
 }
