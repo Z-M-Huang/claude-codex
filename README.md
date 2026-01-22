@@ -9,7 +9,7 @@
 
 A Claude Code plugin marketplace providing multi-AI orchestration tools for planning, implementing, and reviewing code changes.
 
-> **New to Claude Codex?** Check out our [comprehensive Wiki](https://github.com/Z-M-Huang/claude-codex/wiki) for beginner-friendly guides and tutorials.
+> **New to Claude Codex?** Check out our [Wiki](https://github.com/Z-M-Huang/claude-codex/wiki) for beginner-friendly guides and tutorials. Available in [English](https://github.com/Z-M-Huang/claude-codex/wiki) and [中文](https://github.com/Z-M-Huang/claude-codex/wiki/Home-zh).
 
 ## Why Multi-AI Review?
 
@@ -260,12 +260,23 @@ Claude will recognize this and invoke the appropriate skill.
 
 For detailed guides, visit our [Wiki](https://github.com/Z-M-Huang/claude-codex/wiki):
 
+### English
+
 - [Why Claude Codex?](https://github.com/Z-M-Huang/claude-codex/wiki/Why-Claude-Codex) - Benefits of multi-AI review
 - [Getting Started](https://github.com/Z-M-Huang/claude-codex/wiki/Getting-Started) - Step-by-step installation for beginners
 - [Understanding the Pipeline](https://github.com/Z-M-Huang/claude-codex/wiki/Understanding-the-Pipeline) - How the review process works
 - [How to Use](https://github.com/Z-M-Huang/claude-codex/wiki/How-to-Use) - Commands and usage examples
 - [Configuration](https://github.com/Z-M-Huang/claude-codex/wiki/Configuration) - Customization options
 - [Troubleshooting](https://github.com/Z-M-Huang/claude-codex/wiki/Troubleshooting) - Common issues and solutions
+
+### 中文
+
+- [为什么选择 Claude Codex？](https://github.com/Z-M-Huang/claude-codex/wiki/Why-Claude-Codex-zh) - 多 AI 审查的优势
+- [快速开始](https://github.com/Z-M-Huang/claude-codex/wiki/Getting-Started-zh) - 零基础安装指南
+- [流水线详解](https://github.com/Z-M-Huang/claude-codex/wiki/Understanding-the-Pipeline-zh) - 审查流程工作原理
+- [使用方法](https://github.com/Z-M-Huang/claude-codex/wiki/How-to-Use-zh) - 命令和使用示例
+- [配置说明](https://github.com/Z-M-Huang/claude-codex/wiki/Configuration-zh) - 自定义选项
+- [常见问题](https://github.com/Z-M-Huang/claude-codex/wiki/Troubleshooting-zh) - 问题排查与解决
 
 ## Related Projects
 

@@ -51,7 +51,7 @@
             "type": "string"
           }
         },
-        "required": ["id", "severity", "category", "file", "line", "message", "suggestion"],
+        "required": ["id", "severity", "category", "file", "message", "suggestion"],
         "additionalProperties": false
       }
     },
