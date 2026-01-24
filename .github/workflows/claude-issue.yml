@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      id-token: write
     # Only run if:
     # - Issue just opened, OR
     # - Comment mentions @claude
