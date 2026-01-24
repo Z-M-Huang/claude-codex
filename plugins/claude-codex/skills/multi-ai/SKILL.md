@@ -221,9 +221,13 @@ WHILE PLAN_ITERATION < MAX_PLAN_ITERATIONS:
 
 This command will fail with detailed error if any reviews are incomplete.
 
+**IMPORTANT:** Once validation passes, IMMEDIATELY proceed to Phase 4 - do NOT stop to report or wait for user input. The pipeline is autonomous after requirements approval.
+
 ---
 
 ## Phase 4: Implementation (Ralph Loop)
+
+**AUTO-PROCEED:** When plan reviews pass, automatically start implementation using the Ralph Loop (default) or simple mode based on `plan-refined.json`.
 
 ### Step 10: Check Implementation Mode
 
@@ -408,22 +412,26 @@ The skill handles:
 ## Important Rules
 
 1. **Semi-interactive planning**: Only ask user when genuinely needed
-2. **Autonomous implementation**: Ralph loop handles iteration automatically
-3. **Review before test**: Always run reviews first, then tests
-4. **Accept all feedback**: No debate with reviewers, just fix
-5. **Clear completion criteria**: Tests pass + reviews approve
-6. **Resume for context**: Use resume to preserve worker memory across iterations
-7. **NEVER run Codex via Bash**: Always use `Skill(review-codex)` - the skill handles all Codex CLI invocation, schema paths, and session management. Do NOT run `codex exec` directly.
+2. **Autonomous after plan approval**: Once all 3 plan reviews pass, IMMEDIATELY proceed to implementation - do NOT stop, report, or wait for user confirmation
+3. **Ralph Loop is default**: Use `ralph-loop` mode unless plan explicitly specifies `simple` mode
+4. **Review before test**: Always run reviews first, then tests
+5. **Accept all feedback**: No debate with reviewers, just fix
+6. **Clear completion criteria**: Tests pass + reviews approve
+7. **Resume for context**: Use resume to preserve worker memory across iterations
+8. **NEVER run Codex via Bash**: Always use `Skill(review-codex)` - the skill handles all Codex CLI invocation, schema paths, and session management. Do NOT run `codex exec` directly.
 
 ---
 
 ## Progress Reporting
+
+Report progress inline but DO NOT STOP after plan reviews pass. Continue immediately to implementation.
 
 ```
 Requirements approved. Starting planning...
 - Plan created
 - Risk assessment: No conflicts detected
 - Plan reviews: approved (2 iterations)
+- Proceeding to implementation... [DO NOT STOP HERE]
 
 Starting implementation (ralph-loop mode, max 10 iterations)...
 Iteration 1:
