@@ -274,6 +274,40 @@ Skill(review-codex)
 ```
 **Expected output:** `.task/review-codex.json`
 
+**After Skill completes, IMMEDIATELY:**
+1. Read `.task/review-codex.json`
+2. IF status == "approved":
+   - TaskUpdate(task.id, status: "completed", metadata: {result: "approved"})
+   - Continue main loop
+3. IF status == "needs_changes":
+   - Determine iteration: count existing "Fix Plan" tasks + 1
+   - Create fix task:
+     ```
+     fix_id = TaskCreate(
+       subject: "Fix Plan Issues - Iteration {N}",
+       description: "Address Codex feedback: {review.feedback}",
+       activeForm: "Fixing plan issues"
+     )
+     ```
+   - Create re-review task:
+     ```
+     re_review_id = TaskCreate(
+       subject: "Plan Review - Codex v{N+1}",
+       description: "Re-review plan after fixes. MANDATORY GATE.",
+       activeForm: "Re-running Codex plan review"
+     )
+     TaskUpdate(re_review_id, addBlockedBy: [fix_id])
+     ```
+   - Update Implementation task to wait for re-review:
+     ```
+     TaskUpdate(implementation_id, addBlockedBy: [re_review_id])
+     ```
+   - Mark current task completed:
+     ```
+     TaskUpdate(task.id, status: "completed", metadata: {result: "needs_changes"})
+     ```
+   - **Continue main loop** (TaskList will return fix task as next unblocked)
+
 #### "Implementation"
 ```bash
 # Update state FIRST
@@ -317,6 +351,36 @@ Task(
 Skill(review-codex)
 ```
 **Expected output:** `.task/review-codex.json`
+
+**After Skill completes, IMMEDIATELY:**
+1. Read `.task/review-codex.json`
+2. IF status == "approved":
+   - TaskUpdate(task.id, status: "completed", metadata: {result: "approved"})
+   - Continue main loop → Pipeline COMPLETE
+3. IF status == "needs_changes":
+   - Determine iteration: count existing "Fix Code" tasks + 1
+   - Create fix task:
+     ```
+     fix_id = TaskCreate(
+       subject: "Fix Code Issues - Iteration {N}",
+       description: "Address Codex feedback: {review.feedback}",
+       activeForm: "Fixing code issues"
+     )
+     ```
+   - Create re-review task:
+     ```
+     re_review_id = TaskCreate(
+       subject: "Code Review - Codex v{N+1}",
+       description: "Re-review code after fixes. MANDATORY GATE.",
+       activeForm: "Re-running Codex code review"
+     )
+     TaskUpdate(re_review_id, addBlockedBy: [fix_id])
+     ```
+   - Mark current task completed:
+     ```
+     TaskUpdate(task.id, status: "completed", metadata: {result: "needs_changes"})
+     ```
+   - **Continue main loop** (TaskList will return fix task as next unblocked)
 
 #### "Fix [Phase] Issues - Iteration N" (Dynamic Fix Tasks)
 ```

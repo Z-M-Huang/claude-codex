@@ -20,9 +20,10 @@ jobs:
       github.event_name == 'issues' ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
     steps:
+      - uses: actions/checkout@v4
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             You are the maintainer assistant for Claude Codex, a multi-AI orchestration pipeline plugin for Claude Code.
 
