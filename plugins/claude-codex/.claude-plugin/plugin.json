@@ -1,7 +1,7 @@
 {
   "name": "claude-codex",
-  "version": "1.1.2",
-  "description": "Multi-AI orchestration pipeline with TDD-driven Ralph Loop (sonnet → opus → codex)",
+  "version": "1.2.0",
+  "description": "Multi-AI orchestration pipeline with TDD-driven Ralph Loop using Task + Resume architecture",
   "author": {
     "name": "Z-M-Huang",
     "url": "https://github.com/Z-M-Huang"

@@ -1,31 +1,38 @@
-# Pipeline Workflow (Autonomous Mode)
+# Pipeline Workflow (Task + Resume Architecture)
 
 ## Architecture Overview
 
-This pipeline uses a **skill-based autonomous architecture**:
+This pipeline uses a **Task + Resume architecture** with custom agents:
 
-- **User Story Phase** = Interactive requirements gathering (only interactive phase)
-- **Main Claude Code thread** = Does planning, research, implementation, and auto-fixes
-- **Reviewer Skills** = Sequential reviews with forked context isolation
-- **Codex** = Final review via skill (invokes Codex CLI)
+- **Orchestrator (Main Session)** = Coordinates worker agents via Task tool
+- **Worker Agents** = Specialized agents defined in `agents/` directory
+- **Resume Capability** = Workers can be resumed with preserved context
+- **Codex** = Final review via `/review-codex` skill (invokes Codex CLI)
 
 ### Key Principle: Autonomous After Requirements
 
 Once the user approves requirements:
 - Pipeline runs **autonomously** without pauses
-- Issues found by reviewers are **auto-fixed**
+- Issues found by reviewers are **auto-fixed** by resuming workers
 - Only pause for: `needs_clarification`, exceeded limits, or unrecoverable errors
+
+### Custom Agents
+
+| Agent | Model | Purpose | Phase |
+|-------|-------|---------|-------|
+| `requirements-gatherer` | opus | Business Analyst + PM hybrid | Requirements |
+| `planner` | opus | Architect + Fullstack hybrid | Planning |
+| `plan-reviewer` | sonnet/opus | Architecture + Security + QA | Plan Review |
+| `implementer` | sonnet | Fullstack + TDD + Quality | Implementation |
+| `code-reviewer` | sonnet/opus | Security + Performance + QA | Code Review |
 
 ### Skills
 
-| Skill | Purpose | Model | Phase |
-|-------|---------|-------|-------|
-| `multi-ai` | Pipeline entry point | - | All |
-| `user-story` | Requirements gathering (interactive) | - | Requirements |
-| `implement-sonnet` | Code implementation | sonnet | Implementation |
-| `review-sonnet` | Fast review | sonnet | Review |
-| `review-opus` | Deep review | opus | Review |
-| `review-codex` | Final review | codex | Review |
+| Skill | Purpose | Phase |
+|-------|---------|-------|
+| `/multi-ai` | Pipeline entry point | All |
+| `/review-codex` | Final review (Codex CLI) | Review |
+| `/cancel-loop` | Cancel active ralph loop | Emergency |
 
 ---
 
@@ -37,10 +44,12 @@ Once the user approves requirements:
 
 This command handles the entire workflow:
 
-1. **Requirements gathering** (interactive) - Clarify what you want
-2. **Planning** (autonomous) - Create and refine plan
-3. **Implementation** (autonomous) - Write code
-4. **Completion** - Report results
+1. **Requirements gathering** (interactive) - requirements-gatherer agent
+2. **Planning** (semi-interactive) - planner agent
+3. **Plan reviews** (autonomous) - plan-reviewer agents + Codex gate
+4. **Implementation** (ralph loop) - implementer agent
+5. **Code reviews** (autonomous) - code-reviewer agents + Codex gate
+6. **Completion** - Report results
 
 ---
 
@@ -50,64 +59,147 @@ This command handles the entire workflow:
 
 ```
 idle
-  ↓
-requirements_gathering (/user-story)
-  │  - Analyze request
-  │  - Ask clarifying questions
-  │  - Get user approval
-  ↓ [approved]
+  |
+requirements_gathering (requirements-gatherer agent via Task)
+  |  - Analyze request
+  |  - Ask clarifying questions (via worker signal)
+  |  - Get user approval
+  | [approved]
 plan_drafting
 ```
 
-This is the **ONLY interactive phase**. The /user-story skill will:
-- Ask clarifying questions using AskUserQuestion
-- Summarize requirements
-- Get explicit user approval before proceeding
+The orchestrator spawns the **requirements-gatherer** agent using Task tool:
+- Agent writes questions to `.task/worker-signal.json` with `status: needs_input`
+- Orchestrator uses AskUserQuestion to get answers
+- Orchestrator resumes agent with answers
+- Agent writes approved requirements
 
 **Output:** `.task/user-story.json` (approved requirements)
 
-### Phase 2: Planning (AUTONOMOUS)
+### Phase 2: Planning (SEMI-INTERACTIVE)
 
 ```
 plan_drafting
-  ↓ (main thread creates initial plan)
+  | (planner agent via Task)
 plan_refining
-  ↓ (main thread researches and refines)
-  ↓ AUTOMATED review loop:
-  │   1. /review-sonnet → auto-fix issues
-  │   2. /review-opus → auto-fix issues
-  │   3. /review-codex → if issues, auto-fix and restart
-  ↓ [all approved]
+  | (planner agent researches and refines)
+  | [plan complete]
+plan_reviewing
+```
+
+**Flow:**
+1. Orchestrator spawns **planner** agent via Task tool
+2. Agent researches codebase using read-only tools
+3. Agent writes implementation plan
+4. If risks require user decision, orchestrator asks user
+
+**Output:** `.task/plan-refined.json` (refined plan)
+
+### Phase 3: Plan Reviews (AUTONOMOUS)
+
+```
+plan_reviewing
+  | AUTOMATED review loop:
+  |   1. Task(plan-reviewer, sonnet) -> review-sonnet.json
+  |   2. Task(plan-reviewer, opus)   -> review-opus.json
+  |   3. Skill(review-codex)         -> review-codex.json <- GATE
+  |   Loop until all approved (resume planner for fixes)
+  | [all approved]
 implementing
 ```
 
 **Flow:**
-1. Main thread → Creates initial plan from approved requirements
-2. Main thread → Researches codebase and refines plan
-3. **Automated Review Loop** (no user pauses):
-   - `/review-sonnet` → If issues, fix automatically, continue
-   - `/review-opus` → If issues, fix automatically, continue
-   - `/review-codex` → If approved, proceed; if issues, fix and restart from sonnet
+1. **Sonnet review** - Task(plan-reviewer, model: sonnet)
+   - If needs_changes: resume planner to fix, continue
+2. **Opus review** - Task(plan-reviewer, model: opus)
+   - If needs_changes: resume planner to fix, continue
+3. **Codex review** - Skill(review-codex) - FINAL GATE
+   - If approved: proceed to implementation
+   - If needs_changes: resume planner, restart from sonnet
 
-### Phase 3: Implementation (AUTONOMOUS)
+### Phase 4: Implementation (RALPH LOOP)
 
 ```
 implementing
-  ↓ (/implement-sonnet writes code)
-  ↓ AUTOMATED review loop:
-  │   1. /review-sonnet → auto-fix issues
-  │   2. /review-opus → auto-fix issues
-  │   3. /review-codex → if issues, auto-fix and restart
-  ↓ [all approved]
+  | (implementer agent via Task, resumable)
+implementing_loop
+  | AUTOMATED loop:
+  |   1. Implement/fix code (resume implementer)
+  |   2. Task(code-reviewer, sonnet) -> review-sonnet.json
+  |   3. Task(code-reviewer, opus)   -> review-opus.json
+  |   4. Skill(review-codex)         -> review-codex.json <- GATE
+  |   5. Run tests from plan
+  |   Loop until all approved + tests pass
+  | [complete]
 complete
 ```
 
 **Flow:**
-1. **Invoke /implement-sonnet** → Writes code following standards
-2. **Automated Review Loop** (no user pauses):
-   - `/review-sonnet` → Code quality + security + tests
-   - `/review-opus` → Architecture + subtle bugs + test quality
-   - `/review-codex` → Final approval
+1. Orchestrator spawns **implementer** agent via Task tool
+2. Agent implements code following TDD approach
+3. **Automated Review + Test Loop** (no user pauses):
+   - Task(code-reviewer, sonnet) -> If issues, resume implementer
+   - Task(code-reviewer, opus) -> If issues, resume implementer
+   - Skill(review-codex) -> Final gate
+   - Run test commands from plan
+   - Loop until all pass
+
+The **stop hook** enforces completion criteria:
+- All reviews have status: "approved"
+- All test commands pass
+
+---
+
+## Task + Resume Pattern
+
+### Spawning Workers
+
+```javascript
+// First invocation - spawn new agent
+Task(
+  subagent_type: "general-purpose",
+  model: "opus",
+  prompt: "[Agent prompt from requirements-gatherer.md]..."
+)
+// Returns: agentId
+
+// Resume with preserved context
+Task(
+  resume: agentId,
+  prompt: "User answered: [answers]. Continue from where you left off."
+)
+```
+
+### When to Resume vs Fresh Spawn
+
+| Situation | Action |
+|-----------|--------|
+| Continue requirements Q&A | Resume |
+| Planner fixing review feedback | Resume |
+| Implementer fixing issues | Resume |
+| Reviews (independent analysis) | Fresh spawn |
+
+### Worker Signal Protocol
+
+Workers communicate via `.task/worker-signal.json`:
+
+```json
+{
+  "worker_id": "requirements-gatherer-abc123",
+  "phase": "requirements",
+  "status": "needs_input|completed|error|in_progress",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which authentication method?",
+      "options": ["JWT", "Session cookies"],
+      "context": "Plan requires auth but method unspecified"
+    }
+  ],
+  "agent_id": "abc123",
+  "timestamp": "ISO8601"
+}
+```
 
 ---
 
@@ -123,22 +215,22 @@ MAX_LOOPS = <from pipeline.config.json>
 
 WHILE LOOP_COUNT < MAX_LOOPS:
 
-    1. INVOKE /review-sonnet
+    1. SPAWN Task(plan-reviewer OR code-reviewer, model: sonnet)
        READ .task/review-sonnet.json
-       IF needs_changes: FIX automatically
+       IF needs_changes: RESUME worker to FIX
 
-    2. INVOKE /review-opus
+    2. SPAWN Task(plan-reviewer OR code-reviewer, model: opus)
        READ .task/review-opus.json
-       IF needs_changes: FIX automatically
+       IF needs_changes: RESUME worker to FIX
 
-    3. INVOKE /review-codex
+    3. INVOKE Skill(review-codex)
        READ .task/review-codex.json
        IF approved: EXIT loop
-       IF needs_changes: FIX, INCREMENT LOOP_COUNT, RESTART
+       IF needs_changes: RESUME worker, INCREMENT LOOP_COUNT, RESTART
 
     IF needs_clarification in any review:
         PAUSE - ask user (AskUserQuestion)
-        After response, continue
+        After response, resume and continue
 
 IF LOOP_COUNT >= MAX_LOOPS:
     PAUSE - inform user, ask to continue or abort
@@ -177,18 +269,16 @@ Example output:
 ```
 [INFO] Current state: implementing
 
-ACTION: Invoke /implement-sonnet to implement the approved plan
+ACTION: Implement the approved plan (implementer agent)
 
-Task: Implement the approved plan
-Skill: /implement-sonnet
+Task: Implement the approved plan using Task tool with implementer agent
+Agent: implementer (sonnet model)
 Input: .task/plan-refined.json
 
-After implementation, reviews run AUTOMATICALLY (no pauses):
-  1. /review-sonnet → auto-fix if issues
-  2. /review-opus → auto-fix if issues
-  3. /review-codex → auto-fix and restart if issues
-
-Pipeline will proceed autonomously until complete.
+After implementation, run SEQUENTIAL reviews using Task tool:
+  1. Task(code-reviewer, sonnet) -> review-sonnet.json
+  2. Task(code-reviewer, opus)   -> review-opus.json
+  3. /review-codex (Codex final gate)
 ```
 
 ### Commands
@@ -209,10 +299,12 @@ Pipeline will proceed autonomously until complete.
 | State | Description | Interactive? |
 |-------|-------------|--------------|
 | `idle` | No active task | No |
-| `requirements_gathering` | /user-story gathering requirements | **YES** |
+| `requirements_gathering` | requirements-gatherer agent | **YES** |
 | `plan_drafting` | Creating initial plan | No |
-| `plan_refining` | Refining plan + automated reviews | No |
-| `implementing` | /implement-sonnet + automated reviews | No |
+| `plan_refining` | Refining plan + reviews | No |
+| `plan_reviewing` | Plan review loop | No |
+| `implementing` | Simple implementation | No |
+| `implementing_loop` | Ralph loop implementation | No |
 | `complete` | Task finished | No |
 | `error` | Pipeline error | No |
 | `needs_user_input` | Paused for clarification | **YES** |
@@ -221,20 +313,27 @@ Pipeline will proceed autonomously until complete.
 
 ```
 idle
-  ↓
-requirements_gathering (/user-story - INTERACTIVE)
-  │  Ask questions, get user approval
-  ↓ [approved]
-plan_drafting (main thread creates plan)
-  ↓
-plan_refining (refine + AUTOMATED review loop)
-  │   sonnet → fix → opus → fix → codex
-  │   Loop until approved (no user pauses)
-  ↓ [all approved]
-implementing (/implement-sonnet + AUTOMATED review loop)
-  │   sonnet → fix → opus → fix → codex
-  │   Loop until approved (no user pauses)
-  ↓ [all approved]
+  |
+requirements_gathering (requirements-gatherer agent - INTERACTIVE)
+  |  Resume for Q&A iterations
+  | [approved]
+plan_drafting
+  |
+plan_refining (planner agent)
+  |
+plan_reviewing (AUTOMATED review loop)
+  |   Task(plan-reviewer, sonnet) -> resume planner
+  |   Task(plan-reviewer, opus)   -> resume planner
+  |   Skill(review-codex)         -> resume planner if needed
+  |   Loop until approved (no user pauses)
+  | [all approved]
+implementing / implementing_loop (implementer agent)
+  |   Task(code-reviewer, sonnet) -> resume implementer
+  |   Task(code-reviewer, opus)   -> resume implementer
+  |   Skill(review-codex)         -> resume implementer if needed
+  |   Run tests
+  |   Loop until approved + tests pass (no user pauses)
+  | [all approved + tests pass]
 complete
 ```
 
@@ -247,112 +346,134 @@ complete
 {
   "id": "story-YYYYMMDD-HHMMSS",
   "title": "Short descriptive title",
-  "original_request": "The user's original request text",
   "requirements": {
     "functional": ["req1", "req2"],
-    "technical": ["tech1", "tech2"],
-    "acceptance_criteria": ["criterion1", "criterion2"]
+    "non_functional": ["perf1", "security1"],
+    "constraints": ["constraint1"]
   },
-  "scope": {
-    "in_scope": ["item1", "item2"],
-    "out_of_scope": ["item1", "item2"]
-  },
-  "clarifications": [
-    {"question": "Q1?", "answer": "A1"}
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "scenario": "User logs in",
+      "given": "User is on login page",
+      "when": "User enters valid credentials",
+      "then": "User is redirected to dashboard"
+    }
   ],
+  "scope": {
+    "in_scope": ["item1"],
+    "out_of_scope": ["item1"]
+  },
+  "test_criteria": {
+    "commands": ["npm test"],
+    "success_pattern": "All tests passed",
+    "failure_pattern": "FAILED"
+  },
+  "implementation": {
+    "mode": "ralph-loop",
+    "max_iterations": 10
+  },
   "approved_at": "ISO8601",
   "approved_by": "user"
-}
-```
-
-### plan.json (Initial plan)
-```json
-{
-  "id": "plan-YYYYMMDD-HHMMSS",
-  "title": "Short descriptive title",
-  "description": "What the user wants to achieve",
-  "requirements": ["req1", "req2"],
-  "created_at": "ISO8601",
-  "created_by": "claude"
 }
 ```
 
 ### plan-refined.json (Refined plan)
 ```json
 {
-  "id": "plan-001",
+  "id": "plan-YYYYMMDD-HHMMSS",
   "title": "Feature title",
-  "description": "What the user wants",
-  "requirements": ["req 1", "req 2"],
-  "technical_approach": "How to implement",
+  "technical_approach": {
+    "pattern": "Repository pattern",
+    "rationale": "Existing codebase uses this"
+  },
+  "steps": [
+    {
+      "id": 1,
+      "phase": "implementation",
+      "file": "path/to/file.ts",
+      "action": "modify",
+      "description": "Add user service"
+    }
+  ],
   "files_to_modify": ["path/to/file.ts"],
   "files_to_create": ["path/to/new.ts"],
-  "dependencies": [],
-  "estimated_complexity": "low|medium|high",
-  "potential_challenges": ["challenge 1"],
-  "refined_by": "claude",
-  "refined_at": "ISO8601"
+  "test_plan": {
+    "commands": ["npm test", "npm run lint"],
+    "success_pattern": "All tests passed",
+    "failure_pattern": "FAILED"
+  },
+  "implementation": {
+    "mode": "ralph-loop",
+    "max_iterations": 10
+  },
+  "completion_promise": "<promise>IMPLEMENTATION_COMPLETE</promise>"
 }
 ```
 
-### Review outputs (automated)
+### Review outputs
 
-Each skill outputs to its own file:
+Each reviewer outputs to its designated file:
 
-| File | Skill | Model |
-|------|-------|-------|
-| `.task/review-sonnet.json` | /review-sonnet | sonnet |
-| `.task/review-opus.json` | /review-opus | opus |
-| `.task/review-codex.json` | /review-codex | codex |
+| File | Reviewer | Model |
+|------|----------|-------|
+| `.task/review-sonnet.json` | plan-reviewer/code-reviewer | sonnet |
+| `.task/review-opus.json` | plan-reviewer/code-reviewer | opus |
+| `.task/review-codex.json` | /review-codex skill | codex |
 
 Format:
 ```json
 {
-  "status": "approved|needs_changes",
-  "review_type": "plan|code",
-  "reviewer": "review-sonnet",
-  "model": "sonnet",
-  "reviewed_at": "ISO8601",
+  "id": "review-YYYYMMDD-HHMMSS",
+  "reviewer": "plan-reviewer|code-reviewer",
+  "model": "sonnet|opus",
+  "status": "approved|needs_changes|needs_clarification",
   "summary": "Review summary",
-  "needs_clarification": false,
-  "clarification_questions": [],
-  "checklist": {
-    "security_owasp": "PASS|WARN|FAIL",
-    "error_handling": "PASS|WARN|FAIL",
-    "resource_management": "PASS|WARN|FAIL",
-    "configuration": "PASS|WARN|FAIL",
-    "code_quality": "PASS|WARN|FAIL",
-    "concurrency": "PASS|WARN|FAIL|N/A",
-    "logging": "PASS|WARN|FAIL",
-    "dependencies": "PASS|WARN|FAIL",
-    "api_design": "PASS|WARN|FAIL|N/A",
-    "backward_compatibility": "PASS|WARN|FAIL|N/A",
-    "testing": "PASS|WARN|FAIL",
-    "over_engineering": "PASS|WARN|FAIL"
+  "scores": {
+    "security": 8,
+    "quality": 9,
+    "overall": 8
   },
-  "issues": [
+  "findings": [
     {
-      "severity": "error|warning|suggestion",
-      "category": "security|error_handling|resource|config|quality|concurrency|logging|deps|api|compat|test|over_engineering",
-      "file": "path/to/file.ts",
-      "line": 42,
-      "message": "Issue description",
-      "suggestion": "How to fix"
+      "id": "F1",
+      "category": "security",
+      "severity": "high",
+      "title": "Missing input validation",
+      "recommendation": "Add validation"
     }
-  ]
+  ],
+  "blockers": ["Critical issues"],
+  "reviewed_at": "ISO8601"
 }
 ```
-
-When `needs_clarification: true`, the pipeline pauses and asks the user the questions in `clarification_questions`.
 
 ### impl-result.json (Implementation result)
 ```json
 {
-  "status": "completed|failed|needs_clarification",
-  "summary": "What was implemented",
-  "files_changed": ["path/to/file.ts"],
-  "tests_added": ["path/to/test.ts"],
-  "questions": []
+  "id": "impl-YYYYMMDD-HHMMSS",
+  "plan_implemented": "plan-YYYYMMDD-HHMMSS",
+  "status": "complete|partial|failed",
+  "files_modified": ["path/to/file.ts"],
+  "files_created": ["path/to/new.ts"],
+  "tests": {
+    "written": 5,
+    "passing": 5,
+    "failing": 0
+  },
+  "completed_at": "ISO8601"
+}
+```
+
+### loop-state.json (Ralph Loop state)
+```json
+{
+  "active": true,
+  "iteration": 3,
+  "max_iterations": 10,
+  "implementer_agent_id": "abc123",
+  "completion_promise": "<promise>IMPLEMENTATION_COMPLETE</promise>",
+  "started_at": "ISO8601"
 }
 ```
 
@@ -367,31 +488,14 @@ In `pipeline.config.json`:
 ```json
 {
   "autonomy": {
-    "mode": "autonomous",
-    "approvalPoints": {
-      "userStory": true,
-      "planning": false,
-      "implementation": false,
-      "review": false,
-      "commit": true
-    },
-    "pauseOnlyOn": ["needs_clarification", "review_loop_exceeded", "unrecoverable_error"],
-    "reviewLoopLimit": 10,
+    "mode": "ralph-loop",
     "planReviewLoopLimit": 10,
     "codeReviewLoopLimit": 15
-  }
-}
-```
-
-### Local Config Overrides
-
-Create `pipeline.config.local.json` for local overrides (gitignored):
-
-```json
-{
-  "autonomy": {
-    "planReviewLoopLimit": 5,
-    "codeReviewLoopLimit": 10
+  },
+  "ralphLoop": {
+    "defaultMode": "ralph-loop",
+    "defaultMaxIterations": 10,
+    "completionPromise": "<promise>IMPLEMENTATION_COMPLETE</promise>"
   }
 }
 ```
@@ -418,8 +522,9 @@ Checks:
 - `.task/` directory exists
 - `state.json` valid
 - `pipeline.config.json` valid
-- Required scripts executable (4 scripts)
-- Required skills exist (6 skills)
+- Required scripts executable
+- Required skills exist (multi-ai, review-codex, cancel-loop)
+- Required agents exist (5 agents)
 - Required docs exist
 - `.task` in `.gitignore`
 - CLI tools available
@@ -441,3 +546,13 @@ Codex reviews use `resume --last` for subsequent reviews to save tokens.
 - **First review** (new task): Full prompt with all context
 - **Subsequent reviews**: Uses `resume --last` + changes summary
 - **Session tracking**: `.task/.codex-session-active` marker file
+
+---
+
+## Emergency Controls
+
+If the loop is stuck:
+
+1. **Cancel command:** `/cancel-loop`
+2. **Delete state file:** `rm .task/loop-state.json`
+3. **Max iterations:** Loop auto-stops at limit

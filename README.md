@@ -67,32 +67,36 @@ After installation, use skills with the plugin namespace:
 # Start the full pipeline
 /claude-codex:multi-ai Add user authentication with JWT
 
-# Or run individual skills
-/claude-codex:review-sonnet
-/claude-codex:review-opus
-/claude-codex:review-codex
-/claude-codex:implement-sonnet
+# Emergency controls
+/claude-codex:cancel-loop    # Stop an active Ralph Loop
+/claude-codex:review-codex   # Manual Codex review (usually automatic)
 ```
 
 ## Available Plugins
 
 ### claude-codex
 
-Multi-AI orchestration pipeline with **TDD-driven Ralph Loop** (sonnet → opus → codex).
+Multi-AI orchestration pipeline with **TDD-driven Ralph Loop** using Task + Resume architecture.
 
-**New in v1.1.2:** Ralph Loop mode - implementation phase automatically iterates until all tests pass AND all reviews approve. No more manual intervention!
+**New in v1.2.0:** Task + Resume architecture with custom agents - workers can be resumed with preserved context for iterative fixes. Requirements gathering, planning, implementation, and reviews all handled by specialized agents.
 
-**Skills included:**
+**Skills:**
 
-| Skill              | Model             | Purpose                                     |
-| ------------------ | ----------------- | ------------------------------------------- |
-| `multi-ai`         | -                 | Pipeline entry point (starts full workflow) |
-| `user-story`       | -                 | Gather requirements + TDD criteria          |
-| `implement-sonnet` | Claude Sonnet 4.5 | Code implementation with main context       |
-| `review-sonnet`    | Claude Sonnet 4.5 | Fast review (code + security + tests)       |
-| `review-opus`      | Claude Opus 4.5   | Deep review (architecture + subtle issues)  |
-| `review-codex`     | Codex CLI         | Final review via OpenAI Codex               |
-| `cancel-loop`      | -                 | Emergency stop for Ralph Loop               |
+| Skill          | Purpose                                     |
+| -------------- | ------------------------------------------- |
+| `multi-ai`     | Pipeline entry point (orchestrates agents)  |
+| `review-codex` | Final review via OpenAI Codex (gate)        |
+| `cancel-loop`  | Emergency stop for Ralph Loop               |
+
+**Custom Agents:**
+
+| Agent                   | Model  | Purpose                                  |
+| ----------------------- | ------ | ---------------------------------------- |
+| `requirements-gatherer` | Opus   | Business Analyst + PM hybrid             |
+| `planner`               | Opus   | Architect + Fullstack hybrid             |
+| `plan-reviewer`         | Both   | Architecture + Security + QA validation  |
+| `implementer`           | Sonnet | Fullstack + TDD + Quality implementation |
+| `code-reviewer`         | Both   | Security + Performance + QA validation   |
 
 ## Recommended Subscriptions
 
@@ -109,38 +113,42 @@ Multi-AI orchestration pipeline with **TDD-driven Ralph Loop** (sonnet → opus 
 /claude-codex:multi-ai Add user authentication with JWT tokens
 ```
 
-This command:
+This command orchestrates specialized agents:
 
-1. **Requirements** (interactive) - Gathers requirements + TDD test criteria
-2. **Planning** (semi-interactive) - Creates plan, only asks if conflicts detected
-3. **Implementation** (Ralph Loop) - Iterates until tests pass + reviews approve
-4. **Complete** - Reports results
+1. **Requirements** (interactive) - `requirements-gatherer` agent gathers requirements + TDD criteria
+2. **Planning** (semi-interactive) - `planner` agent creates plan, asks user only if needed
+3. **Plan Reviews** (autonomous) - `plan-reviewer` agents (sonnet, opus) + Codex gate
+4. **Implementation** (Ralph Loop) - `implementer` agent iterates until tests pass + reviews approve
+5. **Code Reviews** (autonomous) - `code-reviewer` agents (sonnet, opus) + Codex gate
+6. **Complete** - Reports results
 
 ### Ralph Loop: TDD-Driven Implementation
 
-The implementation phase uses the **Ralph Wiggum technique** - an autonomous iteration loop:
+The implementation phase uses the **Ralph Wiggum technique** with Task + Resume:
 
 ```
-┌──────────────────────────────────────────┐
-│  RALPH LOOP (until max iterations)       │
-│  ┌────────────────────────────────────┐  │
-│  │ 1. Implement/fix code              │  │
-│  │ 2. Review (sonnet → opus → codex)  │  │
-│  │ 3. Run tests                       │  │
-│  │                                    │  │
-│  │ IF all reviews pass AND tests pass │  │
-│  │    → EXIT with completion promise  │  │
-│  │ ELSE                               │  │
-│  │    → continue loop                 │  │
-│  └────────────────────────────────────┘  │
-└──────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│  RALPH LOOP (until max iterations)                  │
+│  ┌──────────────────────────────────────────────┐  │
+│  │ 1. Implement/fix code (implementer agent)    │  │
+│  │ 2. Code review (sonnet) - Task tool          │  │
+│  │ 3. Code review (opus) - Task tool            │  │
+│  │ 4. Code review (codex) - Skill tool          │  │
+│  │ 5. Run tests from plan                       │  │
+│  │                                              │  │
+│  │ IF all reviews pass AND tests pass           │  │
+│  │    → EXIT with completion promise            │  │
+│  │ ELSE                                         │  │
+│  │    → RESUME implementer with feedback        │  │
+│  └──────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────┘
 ```
 
 **Key benefits:**
 
-- **Autonomous iteration** - No manual intervention needed
+- **Context preservation** - Resume workers with full conversation history
 - **TDD completion** - Tests define "done"
-- **Multi-AI review** - Every iteration gets reviewed by all three models
+- **Multi-AI review** - Three independent reviewers each iteration
 - **Safety limits** - Max iterations prevents infinite loops
 - **Cancel anytime** - `/cancel-loop` for emergency stop
 
@@ -154,13 +162,18 @@ claude-codex/
 │   └── claude-codex/             # Multi-AI plugin
 │       ├── .claude-plugin/
 │       │   └── plugin.json       # Plugin manifest
+│       ├── agents/               # Custom agent definitions
+│       │   ├── requirements-gatherer.md
+│       │   ├── planner.md
+│       │   ├── plan-reviewer.md
+│       │   ├── implementer.md
+│       │   └── code-reviewer.md
 │       ├── skills/               # Pipeline skills
-│       │   ├── multi-ai/
-│       │   ├── implement-sonnet/
-│       │   ├── review-sonnet/
-│       │   ├── review-opus/
-│       │   └── review-codex/
+│       │   ├── multi-ai/         # Main orchestrator
+│       │   ├── review-codex/     # Codex final gate
+│       │   └── cancel-loop/      # Emergency stop
 │       ├── scripts/              # Orchestration scripts
+│       ├── hooks/                # Ralph Loop hooks
 │       ├── docs/                 # Standards and workflow
 │       ├── .task.template/       # Task directory template
 │       ├── pipeline.config.json

@@ -189,11 +189,8 @@ run_dry_run() {
   local skills_dir="$PLUGIN_ROOT/skills"
   local required_skills=(
     "multi-ai/SKILL.md"
-    "user-story/SKILL.md"
-    "implement-sonnet/SKILL.md"
-    "review-sonnet/SKILL.md"
-    "review-opus/SKILL.md"
     "review-codex/SKILL.md"
+    "cancel-loop/SKILL.md"
   )
   local skills_ok=1
   if [[ -d "$skills_dir" ]]; then
@@ -207,6 +204,30 @@ run_dry_run() {
     [[ $skills_ok -eq 1 ]] && echo "Skills: OK (${#required_skills[@]} skills)"
   else
     echo "Skills directory: MISSING (skills/)"
+    ((errors++)) || true
+  fi
+
+  # 5b. Check custom agents
+  local agents_dir="$PLUGIN_ROOT/agents"
+  local required_agents=(
+    "requirements-gatherer.md"
+    "planner.md"
+    "plan-reviewer.md"
+    "implementer.md"
+    "code-reviewer.md"
+  )
+  local agents_ok=1
+  if [[ -d "$agents_dir" ]]; then
+    for agent in "${required_agents[@]}"; do
+      if [[ ! -f "$agents_dir/$agent" ]]; then
+        echo "Agent missing: $agent"
+        agents_ok=0
+        ((errors++)) || true
+      fi
+    done
+    [[ $agents_ok -eq 1 ]] && echo "Agents: OK (${#required_agents[@]} agents)"
+  else
+    echo "Agents directory: MISSING (agents/)"
     ((errors++)) || true
   fi
 
@@ -302,16 +323,19 @@ show_next_action() {
       echo "Pipeline idle. To start, invoke /multi-ai with your request."
       echo ""
       echo "The pipeline will:"
-      echo "  1. Gather requirements (interactive - /user-story)"
-      echo "  2. Plan autonomously (no user pauses)"
-      echo "  3. Implement autonomously (no user pauses)"
-      echo "  4. Report results"
+      echo "  1. Gather requirements (interactive - requirements-gatherer agent)"
+      echo "  2. Plan (semi-interactive - planner agent)"
+      echo "  3. Review plan (sequential - sonnet, opus, codex gate)"
+      echo "  4. Implement (ralph loop - implementer agent)"
+      echo "  5. Review code (sequential - sonnet, opus, codex gate)"
+      echo "  6. Report results"
       ;;
     requirements_gathering)
       echo "ACTION: Gather and clarify requirements (INTERACTIVE)"
       echo ""
-      echo "The /user-story skill should be active, asking clarifying questions."
-      echo "Once requirements are approved, the pipeline will proceed autonomously."
+      echo "The requirements-gatherer agent should be active via Task tool."
+      echo "Check .task/worker-signal.json for status and questions."
+      echo "Once requirements are approved, the pipeline will proceed to planning."
       echo ""
       echo "If stuck, manually transition:"
       echo "  $PLUGIN_ROOT/scripts/state-manager.sh set plan_drafting \"\""
@@ -328,7 +352,7 @@ show_next_action() {
       echo "  $PLUGIN_ROOT/scripts/state-manager.sh set plan_refining \"\$(bun $PLUGIN_ROOT/scripts/json-tool.ts get $TASK_DIR/plan.json .id)\""
       ;;
     plan_refining)
-      echo "ACTION: Refine plan with technical details (main thread)"
+      echo "ACTION: Refine plan with technical details (planner agent)"
       echo ""
       echo "Task: Research codebase and refine plan"
       echo "Input: $TASK_DIR/plan.json"
@@ -341,13 +365,13 @@ show_next_action() {
       fi
       echo "Output: $TASK_DIR/plan-refined.json"
       echo ""
-      echo "After completion, run SEQUENTIAL reviews (each model reviews once):"
-      echo "  1. Invoke /review-sonnet → $TASK_DIR/review-sonnet.json"
-      echo "     If needs_changes: fix issues, then continue to step 2"
-      echo "  2. Invoke /review-opus → $TASK_DIR/review-opus.json"
-      echo "     If needs_changes: fix issues, then continue to step 3"
-      echo "  3. Invoke /review-codex → $TASK_DIR/review-codex.json"
-      echo "     If needs_changes: fix issues, restart from step 1"
+      echo "After completion, run SEQUENTIAL reviews using Task tool:"
+      echo "  1. Task(plan-reviewer, sonnet) → $TASK_DIR/review-sonnet.json"
+      echo "     If needs_changes: resume planner to fix, then continue to step 2"
+      echo "  2. Task(plan-reviewer, opus) → $TASK_DIR/review-opus.json"
+      echo "     If needs_changes: resume planner to fix, then continue to step 3"
+      echo "  3. /review-codex (Codex final gate) → $TASK_DIR/review-codex.json"
+      echo "     If needs_changes: resume planner to fix, restart from step 1"
       echo "     If approved: transition to implementing"
       echo ""
       echo "When all reviews pass:"
@@ -356,15 +380,15 @@ show_next_action() {
     plan_reviewing)
       echo "NOTE: This state is deprecated. Reviews now happen within plan_refining."
       echo ""
-      echo "Use the sequential skill-based review flow in plan_refining state."
+      echo "Use the Task-based review flow in plan_refining state."
       echo "To return to plan_refining:"
       echo "  $PLUGIN_ROOT/scripts/state-manager.sh set plan_refining \"\$(bun $PLUGIN_ROOT/scripts/json-tool.ts get $TASK_DIR/plan-refined.json .id)\""
       ;;
     implementing)
-      echo "ACTION: Invoke /implement-sonnet to implement the approved plan"
+      echo "ACTION: Implement the approved plan (implementer agent)"
       echo ""
-      echo "Task: Implement the approved plan"
-      echo "Skill: /implement-sonnet"
+      echo "Task: Implement the approved plan using Task tool with implementer agent"
+      echo "Agent: implementer (sonnet model)"
       echo "Input: $TASK_DIR/plan-refined.json"
       echo "Standards: $PLUGIN_ROOT/docs/standards.md"
       if [[ -f "$TASK_DIR/review-codex.json" ]]; then
@@ -376,13 +400,13 @@ show_next_action() {
       fi
       echo "Output: $TASK_DIR/impl-result.json"
       echo ""
-      echo "After implementation, run SEQUENTIAL reviews (each model reviews once):"
-      echo "  1. Invoke /review-sonnet → $TASK_DIR/review-sonnet.json"
-      echo "     If needs_changes: fix issues, then continue to step 2"
-      echo "  2. Invoke /review-opus → $TASK_DIR/review-opus.json"
-      echo "     If needs_changes: fix issues, then continue to step 3"
-      echo "  3. Invoke /review-codex → $TASK_DIR/review-codex.json"
-      echo "     If needs_changes: fix issues, restart from step 1"
+      echo "After implementation, run SEQUENTIAL reviews using Task tool:"
+      echo "  1. Task(code-reviewer, sonnet) → $TASK_DIR/review-sonnet.json"
+      echo "     If needs_changes: resume implementer to fix, then continue to step 2"
+      echo "  2. Task(code-reviewer, opus) → $TASK_DIR/review-opus.json"
+      echo "     If needs_changes: resume implementer to fix, then continue to step 3"
+      echo "  3. /review-codex (Codex final gate) → $TASK_DIR/review-codex.json"
+      echo "     If needs_changes: resume implementer to fix, restart from step 1"
       echo "     If approved: transition to complete"
       echo ""
       echo "When all reviews pass:"
@@ -409,15 +433,15 @@ show_next_action() {
     reviewing)
       echo "NOTE: This state is deprecated. Reviews now happen within implementing."
       echo ""
-      echo "Use the sequential skill-based review flow in implementing state."
+      echo "Use the Task-based review flow in implementing state."
       echo "To return to implementing:"
       echo "  $PLUGIN_ROOT/scripts/state-manager.sh set implementing \"\$(bun $PLUGIN_ROOT/scripts/json-tool.ts get $TASK_DIR/plan-refined.json .id)\""
       ;;
     fixing)
       echo "NOTE: This state is deprecated. Fixes now happen within implementing."
       echo ""
-      echo "The sequential review flow handles fixes inline:"
-      echo "  sonnet → fix → opus → fix → codex → fix (restart from sonnet)"
+      echo "The Task-based review flow handles fixes by resuming the implementer agent:"
+      echo "  sonnet review → resume implementer → opus review → resume → codex → resume"
       echo ""
       echo "To return to implementing:"
       echo "  $PLUGIN_ROOT/scripts/state-manager.sh set implementing \"\$(bun $PLUGIN_ROOT/scripts/json-tool.ts get $TASK_DIR/plan-refined.json .id)\""

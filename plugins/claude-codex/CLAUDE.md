@@ -1,6 +1,6 @@
-# Claude Code - Multi-AI Pipeline with Ralph Loop
+# Claude Code - Multi-Session Orchestrator Pipeline
 
-> **IMPORTANT**: This project uses a **TDD-driven Ralph Loop** for implementation. User interaction happens during requirements gathering and optionally during planning. The implementation phase uses the Ralph Wiggum technique - iterating automatically until tests pass AND all reviews approve.
+> **IMPORTANT**: This project uses a **Multi-Session Orchestrator Architecture** with Task + Resume pattern. The orchestrator coordinates specialized worker agents, handles decision escalation, and uses Codex as an independent final gate.
 
 ## Path Reference
 
@@ -14,30 +14,40 @@
 ## Architecture Overview
 
 ```
-Multi-AI Pipeline with Ralph Loop
-  │
-  ├── Phase 1: Requirements (INTERACTIVE)
-  │     └── /user-story → Gather requirements + TDD criteria
-  │
-  ├── Phase 2: Planning (SEMI-INTERACTIVE)
-  │     ├── Create plan with test commands & risk assessment
-  │     ├── Review loop (autonomous)
-  │     └── Prompt user ONLY if conflicts detected
-  │
-  ├── Phase 3: Implementation (RALPH LOOP)
-  │     ├── IF simple mode → single implementation cycle
-  │     └── IF ralph-loop mode:
-  │           ┌─────────────────────────────────┐
-  │           │  LOOP until max iterations:     │
-  │           │  1. Implement/fix code          │
-  │           │  2. Review (sonnet→opus→codex)  │
-  │           │  3. Run tests                   │
-  │           │  IF all pass → EXIT             │
-  │           │  ELSE → continue loop           │
-  │           └─────────────────────────────────┘
-  │
-  └── Phase 4: Completion
-        └── Report results
+Multi-Session Orchestrator Pipeline
+  |
+  +-- Orchestrator (Main Session)
+  |     +-- Coordinates worker agents via Task tool
+  |     +-- Handles decision escalation from workers
+  |     +-- Manages state and resume contexts
+  |
+  +-- Phase 1: Requirements (INTERACTIVE)
+  |     +-- requirements-gatherer agent (opus)
+  |     +-- Resume for user Q&A iterations
+  |     -> .task/user-story.json
+  |
+  +-- Phase 2: Planning (SEMI-INTERACTIVE)
+  |     +-- planner agent (opus)
+  |     +-- Resume if reviews request changes
+  |     -> .task/plan-refined.json
+  |
+  +-- Phase 3: Plan Reviews
+  |     +-- plan-reviewer agent (sonnet -> opus)
+  |     +-- Codex final gate
+  |     -> .task/review-*.json
+  |
+  +-- Phase 4: Implementation (RALPH LOOP)
+  |     +-- implementer agent (sonnet)
+  |     +-- Resume for iterative fixes
+  |     -> .task/impl-result.json
+  |
+  +-- Phase 5: Code Reviews
+  |     +-- code-reviewer agent (sonnet -> opus)
+  |     +-- Codex final gate
+  |     -> .task/review-*.json
+  |
+  +-- Phase 6: Completion
+        +-- Report results
 ```
 
 ---
@@ -49,24 +59,72 @@ Multi-AI Pipeline with Ralph Loop
 ```
 
 The pipeline will:
-1. **Gather requirements** (interactive) - Including TDD criteria
-2. **Plan** (semi-interactive) - Only asks if conflicts detected
-3. **Implement** (ralph loop) - Iterates until tests pass + reviews approve
-4. **Complete** - Report results
+1. **Gather requirements** (interactive) - Custom agent with Business Analyst + PM expertise
+2. **Plan** (semi-interactive) - Custom agent with Architect expertise
+3. **Review plan** (autonomous) - Sequential reviews: sonnet -> opus -> Codex gate
+4. **Implement** (ralph loop) - Iterates until tests pass + reviews approve
+5. **Review code** (autonomous) - Sequential reviews: sonnet -> opus -> Codex gate
+6. **Complete** - Report results
+
+---
+
+## Custom Agents
+
+The pipeline uses specialized agents defined in `agents/` directory. Model selection is controlled by the orchestrator via Task tool, not hardcoded in agent definitions.
+
+| Agent | Recommended Model | Purpose |
+|-------|-------------------|---------|
+| **requirements-gatherer** | opus | Business Analyst + Product Manager hybrid |
+| **planner** | opus | Architect + Fullstack Developer hybrid |
+| **plan-reviewer** | sonnet/opus | Architect + Security + QA hybrid |
+| **implementer** | sonnet | Fullstack + TDD + Quality hybrid |
+| **code-reviewer** | sonnet/opus | Security + Performance + QA hybrid |
+
+See `AGENTS.md` for detailed agent specifications.
+
+---
+
+## Key Features
+
+### Task + Resume Architecture
+
+Workers can be resumed with preserved context:
+- **Resume for context** - Maintains conversation history across iterations
+- **Fresh analysis** - Reviews start fresh for unbiased perspective
+- **Signal protocol** - Workers communicate needs via `.task/worker-signal.json`
+
+### Codex as Final Gate
+
+Codex (independent AI) provides final approval:
+- Different AI family catches different issues
+- Not "Claude reviewing Claude"
+- Required before implementation can start
+
+### Worker Signal Protocol
+
+Workers communicate via `.task/worker-signal.json`:
+
+```json
+{
+  "worker_id": "phase-timestamp-random",
+  "phase": "requirements|planning|implementation",
+  "status": "needs_input|completed|error|in_progress",
+  "questions": [...],
+  "agent_id": "for_resume"
+}
+```
 
 ---
 
 ## Skills
 
-| Skill | Purpose | Model | Phase |
-|-------|---------|-------|-------|
-| `/multi-ai` | Start pipeline (entry point) | - | All |
-| `/user-story` | Gather requirements + TDD criteria | - | Requirements |
-| `/implement-sonnet` | Code implementation | sonnet | Implementation |
-| `/review-sonnet` | Fast review | sonnet | Review |
-| `/review-opus` | Deep review | opus | Review |
-| `/review-codex` | Final review (Codex CLI) | codex | Review |
-| `/cancel-loop` | Cancel active ralph loop | - | Emergency |
+| Skill | Purpose | Phase |
+|-------|---------|-------|
+| `/multi-ai` | Start pipeline (entry point) | All |
+| `/review-codex` | Final review (Codex CLI) | Review |
+| `/cancel-loop` | Cancel active ralph loop | Emergency |
+
+**Note:** Requirements gathering, planning, review (sonnet/opus), and implementation are handled by custom agents via Task tool. Codex review uses the `/review-codex` skill for proper CLI invocation.
 
 ---
 
@@ -77,51 +135,16 @@ For small, straightforward changes:
 - Single implementation pass
 - One review cycle
 - Tests run once
-- No looping
 
-### Ralph Loop Mode (Default for complex features)
+### Ralph Loop Mode (Default)
 For features requiring iteration:
-- Stop hook intercepts session exit
+- Implementer agent resumed for fixes
 - Reviews + tests run each iteration
 - Loops until ALL pass:
   - Sonnet review: approved
   - Opus review: approved
   - Codex review: approved
   - All test commands: exit code 0
-- Max iterations safety limit (default: 10)
-
----
-
-## TDD Criteria
-
-During requirements gathering, define:
-
-```json
-{
-  "test_criteria": {
-    "commands": ["npm test", "npm run lint"],
-    "success_pattern": "passed|✓",
-    "failure_pattern": "FAILED|Error"
-  },
-  "implementation": {
-    "mode": "ralph-loop",
-    "max_iterations": 10
-  }
-}
-```
-
----
-
-## Risk Assessment
-
-Planning phase detects potential infinite loop risks:
-
-1. **Test vs Review conflicts** - Test requires something reviews might reject
-2. **Linter vs Style conflicts** - Auto-fixes conflict with coding standards
-3. **Missing infrastructure** - Test dependencies not available
-4. **Circular dependencies** - Fixes create new review issues
-
-If risks detected → prompt user for decision.
 
 ---
 
@@ -129,45 +152,24 @@ If risks detected → prompt user for decision.
 
 ```
 idle
-  ↓
-requirements_gathering (/user-story - INTERACTIVE)
-  ↓ [approved]
+  |
+requirements_gathering (requirements-gatherer agent)
+  | [approved]
 plan_drafting
-  ↓
-plan_refining (+ risk assessment)
-  ↓ [conflicts? → ask user]
-plan_reviewing (review loop)
-  ↓ [all approved]
+  |
+plan_refining (planner agent)
+  | [conflicts? -> ask user]
+plan_reviewing (review loop: sonnet -> opus -> codex)
+  | [all approved]
 implementing (simple) OR implementing_loop (ralph)
-  │
-  │ [ralph loop mode]
-  │  ┌──────────────────────────┐
-  │  │ implement → review → test│
-  │  │ IF all pass → exit       │
-  │  │ ELSE → loop              │
-  │  └──────────────────────────┘
-  ↓
+  |
+  | [ralph loop mode]
+  |  +-- implement -> review -> test
+  |  |   IF all pass -> exit
+  |  |   ELSE -> resume implementer, loop
+  |
 complete
 ```
-
----
-
-## Loop State File
-
-During ralph loop, `.task/loop-state.json` tracks progress:
-
-```json
-{
-  "active": true,
-  "iteration": 3,
-  "max_iterations": 10,
-  "completion_promise": "<promise>IMPLEMENTATION_COMPLETE</promise>",
-  "plan_path": ".task/plan-refined.json",
-  "started_at": "2026-01-22T10:00:00Z"
-}
-```
-
-To cancel loop manually: `rm .task/loop-state.json` or `/cancel-loop`
 
 ---
 
@@ -178,21 +180,11 @@ To cancel loop manually: `rm .task/loop-state.json` or `/cancel-loop`
 {
   "id": "story-YYYYMMDD-HHMMSS",
   "title": "Feature title",
-  "requirements": {
-    "functional": ["req1"],
-    "technical": ["tech1"],
-    "acceptance_criteria": ["criterion1"]
-  },
-  "test_criteria": {
-    "commands": ["npm test"],
-    "success_pattern": "passed"
-  },
-  "implementation": {
-    "mode": "ralph-loop",
-    "max_iterations": 10
-  },
-  "approved_at": "ISO8601",
-  "approved_by": "user"
+  "requirements": {...},
+  "acceptance_criteria": [...],
+  "scope": {...},
+  "test_criteria": {...},
+  "implementation": { "mode": "ralph-loop", "max_iterations": 10 }
 }
 ```
 
@@ -200,57 +192,36 @@ To cancel loop manually: `rm .task/loop-state.json` or `/cancel-loop`
 ```json
 {
   "id": "plan-YYYYMMDD-HHMMSS",
-  "title": "Feature title",
-  "technical_approach": "How to implement",
-  "files_to_modify": ["path/to/file.ts"],
-  "implementation": {
-    "mode": "ralph-loop",
-    "max_iterations": 10,
-    "skill": "implement-sonnet"
-  },
-  "test_plan": {
-    "commands": ["npm test", "npm run lint"],
-    "success_pattern": "passed|✓",
-    "run_after_review": true
-  },
-  "risk_assessment": {
-    "infinite_loop_risks": [],
-    "conflicts_detected": [],
-    "requires_user_decision": false
-  },
+  "title": "Plan title",
+  "technical_approach": {...},
+  "steps": [...],
+  "test_plan": {...},
+  "risk_assessment": {...},
   "completion_promise": "<promise>IMPLEMENTATION_COMPLETE</promise>"
+}
+```
+
+### Loop State (`.task/loop-state.json`)
+```json
+{
+  "active": true,
+  "iteration": 0,
+  "max_iterations": 10,
+  "implementer_agent_id": "for-resume",
+  "started_at": "ISO8601"
 }
 ```
 
 ---
 
-## Hooks
+## Scripts
 
-The plugin uses a Stop hook for the ralph loop:
-
-**`hooks/hooks.json`:**
-```json
-{
-  "hooks": {
-    "Stop": [{
-      "hooks": [{
-        "type": "command",
-        "command": "bun ${CLAUDE_PLUGIN_ROOT}/hooks/implementation-stop-hook.js"
-      }]
-    }]
-  }
-}
-```
-
-The hook:
-1. Checks if loop is active (`.task/loop-state.json`)
-2. **Reads** existing review files (does NOT run review skills)
-3. **Runs** test commands from plan (in project directory)
-4. Checks success/failure patterns from plan
-5. Blocks exit if criteria not met, re-feeds prompt
-6. Allows exit when all criteria pass
-
-**IMPORTANT:** You must run `/review-sonnet`, `/review-opus`, `/review-codex` yourself before attempting to exit. The hook only verifies the review file contents.
+| Script | Purpose |
+|--------|---------|
+| `state-manager.sh` | Manage pipeline state |
+| `orchestrator.sh` | Initialize/reset pipeline |
+| `json-tool.ts` | Cross-platform JSON operations |
+| `worker-protocol.ts` | Worker signal management |
 
 ---
 
@@ -260,23 +231,16 @@ The hook:
 
 ```json
 {
-  "version": "1.1.2",
+  "version": "1.2.0",
   "autonomy": {
     "mode": "ralph-loop",
-    "approvalPoints": {
-      "userStory": true,
-      "planning": false,
-      "implementation": false
-    },
-    "pauseOnlyOn": ["needs_clarification", "review_loop_exceeded", "conflicts_detected"],
     "planReviewLoopLimit": 10,
     "codeReviewLoopLimit": 15
   },
   "ralphLoop": {
     "defaultMode": "ralph-loop",
     "defaultMaxIterations": 10,
-    "completionPromise": "<promise>IMPLEMENTATION_COMPLETE</promise>",
-    "testSuccessExitCode": 0
+    "completionPromise": "<promise>IMPLEMENTATION_COMPLETE</promise>"
   }
 }
 ```
@@ -293,12 +257,16 @@ If the loop is stuck:
 
 ---
 
-## Completion Criteria
+## Model Assignment Summary
 
-All must be true to exit ralph loop:
-
-1. ✓ `.task/review-sonnet.json` → status: "approved"
-2. ✓ `.task/review-opus.json` → status: "approved"
-3. ✓ `.task/review-codex.json` → status: "approved"
-4. ✓ All test commands → exit code 0
-5. ✓ Output contains completion promise
+| Phase | Agent | Model | Reason |
+|-------|-------|-------|--------|
+| Requirements | requirements-gatherer | **opus** | Deep understanding + user interaction |
+| Planning | planner | **opus** | Comprehensive codebase research |
+| Plan Review #1 | plan-reviewer | sonnet | Quick quality check |
+| Plan Review #2 | plan-reviewer | opus | Deep architectural analysis |
+| Plan Review #3 | **Codex** | external | Independent final gate |
+| Implementation | implementer | sonnet | Balanced speed/quality |
+| Code Review #1 | code-reviewer | sonnet | Quick code check |
+| Code Review #2 | code-reviewer | opus | Deep code analysis |
+| Code Review #3 | **Codex** | external | Independent final gate |

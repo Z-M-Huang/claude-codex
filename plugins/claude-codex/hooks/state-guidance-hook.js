@@ -5,6 +5,10 @@
  * This UserPromptSubmit hook proactively reminds Claude about the current pipeline
  * state and what actions should be taken next. It helps prevent skipping steps
  * like plan reviews before implementation.
+ *
+ * In the multi-session orchestrator architecture:
+ * - Reviews are done via Task tool with plan-reviewer/code-reviewer agents
+ * - Codex review is done via /review-codex skill
  */
 
 const fs = require('fs');
@@ -82,12 +86,12 @@ function main() {
           `Current review status: ${statusStr}`,
           '',
           'REQUIRED ACTIONS:',
-          '1. Run /review-sonnet (plan review)',
-          '2. Run /review-opus (plan review)',
-          '3. Run /review-codex (plan review)',
+          '1. Run plan review with sonnet (Task tool + plan-reviewer agent)',
+          '2. Run plan review with opus (Task tool + plan-reviewer agent)',
+          '3. Run /review-codex (Codex final gate)',
           '',
           'ALL reviews must return status: "approved" before you can start implementation.',
-          'DO NOT attempt to run /implement-sonnet or transition to implementing state until all reviews pass.',
+          'DO NOT attempt to transition to implementing state until all reviews pass.',
           ''
         ].join('\n');
       }

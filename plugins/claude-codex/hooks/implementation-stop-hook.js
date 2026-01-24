@@ -6,8 +6,10 @@
  * It checks if all completion criteria are met (reviews pass + tests pass).
  * If not, it blocks exit and re-feeds the implementation prompt.
  *
- * IMPORTANT: This hook READS existing review files - it does NOT run the review skills.
- * The multi-ai skill is responsible for invoking review skills before attempting to exit.
+ * IMPORTANT: This hook READS existing review files - it does NOT run the reviews.
+ * The multi-ai orchestrator is responsible for invoking reviews before attempting to exit:
+ * - Sonnet/Opus reviews: Task tool with code-reviewer agent
+ * - Codex review: /review-codex skill
  *
  * Based on the Ralph Wiggum technique from Anthropic's official plugins.
  */
@@ -197,9 +199,15 @@ ${testStatus || 'All tests passed'}
 
 **What to do:**
 1. Fix all issues identified above
-2. Run /review-sonnet, /review-opus, /review-codex (in that order)
-3. Run the test commands from the plan
-4. Attempt to exit - the hook will check criteria again
+2. Run code reviews using Task tool with code-reviewer agent (sonnet then opus)
+3. Run /review-codex for final Codex gate
+4. Run the test commands from the plan
+5. Attempt to exit - the hook will check criteria again
+
+**Review Commands:**
+- Sonnet: Task(subagent_type: "Explore", model: "sonnet", prompt: "[code-reviewer agent] Write to review-sonnet.json")
+- Opus: Task(subagent_type: "Explore", model: "opus", prompt: "[code-reviewer agent] Write to review-opus.json")
+- Codex: Skill(review-codex)
 
 **Completion Criteria:**
 - All review files must have status: "approved"

@@ -1,194 +1,231 @@
 ---
 name: multi-ai
-description: Start the multi-AI pipeline with TDD-driven ralph loop. Plan → Review → Implement (loop until tests pass + reviews approve).
+description: Start the multi-AI pipeline with TDD-driven ralph loop. Plan -> Review -> Implement (loop until tests pass + reviews approve).
 plugin-scoped: true
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Skill, AskUserQuestion
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, AskUserQuestion, Skill
 ---
 
-# Multi-AI Pipeline with Ralph Loop
+# Multi-AI Pipeline Orchestrator
 
-This pipeline combines human-guided planning with autonomous TDD-driven implementation using the Ralph Wiggum technique.
+You coordinate worker agents using Task + Resume, handle their questions, and drive the pipeline to completion with Codex as final gate.
 
 **Scripts location:** `${CLAUDE_PLUGIN_ROOT}/scripts/`
 **Task directory:** `${CLAUDE_PROJECT_DIR}/.task/`
+**Agents location:** `${CLAUDE_PLUGIN_ROOT}/agents/`
 
 ---
 
-## Pipeline Overview
+## Architecture Overview
 
 ```
-Phase 1: Requirements (INTERACTIVE)
-├── /user-story gathers requirements + TDD criteria
-└── User approves
-
-Phase 2: Planning (SEMI-INTERACTIVE)
-├── Create plan with test commands, mode, risk assessment
-├── Review loop for plan (autonomous)
-└── Prompt user ONLY if clarification needed or conflicts detected
-
-Phase 3: Implementation
-├── IF simple mode → implement + single review cycle
-└── IF ralph-loop mode → iterate until tests pass + reviews approve
-
-Phase 4: Complete
+ORCHESTRATOR (This Session)
+    |
+    +-- Phase 1: Requirements [Task + Resume]
+    |       +-- requirements-gatherer agent (opus)
+    |       +-- Resume for user Q&A iterations
+    |       -> Output: .task/user-story.json
+    |
+    +-- Phase 2: Planning [Task + Resume]
+    |       +-- planner agent (opus)
+    |       +-- Resume if reviews request changes
+    |       -> Output: .task/plan-refined.json
+    |
+    +-- Phase 3: Plan Reviews [Sequential]
+    |       +-- Task(plan-reviewer, sonnet)  -> review-sonnet.json
+    |       +-- Task(plan-reviewer, opus)    -> review-opus.json
+    |       +-- Skill(review-codex)          -> review-codex.json  <- FINAL GATE
+    |
+    +-- Phase 4: Implementation [Task + Resume]
+    |       +-- implementer agent (sonnet)
+    |       +-- Resume for iterative fixes (Ralph Loop)
+    |       -> Output: .task/impl-result.json
+    |
+    +-- Phase 5: Code Reviews [Sequential]
+            +-- Task(code-reviewer, sonnet)  -> review-sonnet.json
+            +-- Task(code-reviewer, opus)    -> review-opus.json
+            +-- Skill(review-codex)          -> review-codex.json  <- FINAL GATE
 ```
+
+---
+
+## Your Responsibilities
+
+1. **Spawn workers** for each phase using the Task tool
+2. **Resume workers** when they need continued context
+3. **Monitor signals** by reading `.task/worker-signal.json`
+4. **Handle questions** via AskUserQuestion, then resume workers
+5. **Invoke Codex** via `/review-codex` skill for final approvals
+6. **Track state** in `.task/state.json`
 
 ---
 
 ## Phase 1: Requirements Gathering (Interactive)
 
-### Step 1: Clean Up Previous Task
+### Step 1: Initialize
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator.sh" reset
-```
-
-### Step 2: Set State and Gather Requirements
-
-```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set requirements_gathering ""
 ```
 
-**Invoke /user-story** to interactively gather:
-- Functional requirements
-- Technical requirements
-- Acceptance criteria
-- **TDD criteria** (test commands, success patterns)
-- **Implementation mode** (simple or ralph-loop)
-- **Max iterations** (default 10)
+### Step 2: Spawn Requirements Gatherer
 
-**WAIT** for user approval before continuing.
+Load the agent prompt and spawn:
+
+```
+Read: ${CLAUDE_PLUGIN_ROOT}/agents/requirements-gatherer.md
+```
+
+Then use Task tool:
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "opus",
+  prompt: "
+    [Paste agent prompt from requirements-gatherer.md]
+
+    ## Current Task
+    User request: [paste user's original request]
+
+    ## Output
+    Write approved requirements to .task/user-story.json
+    If you need user input, write to .task/worker-signal.json with status: needs_input
+  "
+)
+```
+
+### Step 3: Handle Worker Signals
+
+After spawning, check for signals:
+
+```
+Read: .task/worker-signal.json
+```
+
+**IF `status: "needs_input"`:**
+1. Read the questions from the signal file
+2. Use `AskUserQuestion` to get user answers
+3. Resume the worker with the answers:
+   ```
+   Task(
+     resume: [agent_id from previous spawn],
+     prompt: "User provided answers: [answers]. Continue from where you left off."
+   )
+   ```
+
+**IF `status: "completed"`:**
+- Verify `.task/user-story.json` exists and is valid
+- Proceed to Phase 2
 
 ---
 
 ## Phase 2: Planning (Semi-Interactive)
 
-### Step 3: Create Initial Plan
+### Step 4: Update State
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set plan_drafting ""
+"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set plan_drafting "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/user-story.json .id)"
 ```
 
-Create `.task/plan.json` based on the approved user story.
+### Step 5: Spawn Planner
 
-### Step 4: Refine Plan with Risk Assessment
+Load and spawn the planner agent:
 
-```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set plan_refining "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan.json .id)"
+```
+Read: ${CLAUDE_PLUGIN_ROOT}/agents/planner.md
 ```
 
-Research the codebase and create `.task/plan-refined.json` with:
+```
+Task(
+  subagent_type: "Plan",
+  model: "opus",
+  prompt: "
+    [Paste agent prompt from planner.md]
 
-```json
-{
-  "id": "plan-YYYYMMDD-HHMMSS",
-  "title": "Feature title",
-  "description": "What the user wants",
-  "requirements": ["req 1", "req 2"],
-  "technical_approach": "How to implement",
-  "files_to_modify": ["path/to/file.ts"],
-  "files_to_create": ["path/to/new.ts"],
-  "implementation": {
-    "mode": "ralph-loop",
-    "max_iterations": 10,
-    "skill": "implement-sonnet"
-  },
-  "test_plan": {
-    "commands": ["npm test", "npm run lint"],
-    "success_pattern": "passed|✓",
-    "run_after_review": true
-  },
-  "risk_assessment": {
-    "infinite_loop_risks": [
-      "Risk: Linter auto-fix may conflict with reviewer style preferences"
-    ],
-    "conflicts_detected": [],
-    "requires_user_decision": false
-  },
-  "completion_promise": "<promise>IMPLEMENTATION_COMPLETE</promise>",
-  "refined_by": "claude",
-  "refined_at": "ISO8601"
-}
+    ## Context
+    User story at: .task/user-story.json
+
+    ## Output
+    Write implementation plan to .task/plan-refined.json
+  "
+)
 ```
 
-### Step 5: Risk Assessment Check
+### Step 6: Risk Assessment Check
 
-Before proceeding, analyze for potential infinite loop risks:
+After planning completes, read the plan and check for risks:
 
-**Check for conflicts:**
-1. **Test vs Review conflicts**: Does the test require something reviews might reject?
-2. **Linter vs Style conflicts**: Do auto-fixes conflict with coding standards?
-3. **Missing infrastructure**: Are test dependencies available?
-4. **Circular dependencies**: Could fixes create new review issues?
+```
+Read: .task/plan-refined.json
+```
 
 **IF `risk_assessment.requires_user_decision` is true:**
-- Use `AskUserQuestion` to present the risks
-- Get user decision on how to proceed
+- Use `AskUserQuestion` to present risks and get user decision
 - Update plan based on user input
 
-**OTHERWISE:** Proceed autonomously.
+---
 
-### Step 6: Plan Review Loop (Autonomous)
+## Phase 3: Plan Reviews (Autonomous)
 
-**Initialize plan review tracking:**
+### Step 7: Initialize Plan Review
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" init-plan-review
+"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set plan_reviewing "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .id)"
 ```
 
-**Run the review loop with iteration tracking:**
+### Step 8: Review Loop
 
 ```
 PLAN_ITERATION = 0
-MAX_PLAN_ITERATIONS = planReviewLoopLimit from config (default: 10)
+MAX_PLAN_ITERATIONS = get from config (default: 10)
 
 WHILE PLAN_ITERATION < MAX_PLAN_ITERATIONS:
 
     # Increment at start of each cycle
     "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" increment-plan-review
 
-    1. INVOKE /review-sonnet (plan mode)
-       - If needs_changes → FIX plan, continue to step 2
+    1. SONNET REVIEW
+       Load: ${CLAUDE_PLUGIN_ROOT}/agents/plan-reviewer.md
+       Task(subagent_type: "Plan", model: "sonnet", prompt: "[agent prompt] Review .task/plan-refined.json")
+       -> Writes .task/review-sonnet.json
 
-    2. INVOKE /review-opus (plan mode)
-       - If needs_changes → FIX plan, continue to step 3
+       IF needs_changes -> Resume planner to fix, restart loop
+       IF needs_clarification -> AskUserQuestion, resume planner
 
-    3. INVOKE /review-codex (plan mode)
-       - If approved → EXIT loop, proceed to implementation
-       - If needs_changes → FIX plan, go back to step 1
-       - If needs_clarification → ASK user, then continue
+    2. OPUS REVIEW
+       Task(subagent_type: "Plan", model: "opus", prompt: "[agent prompt] Review .task/plan-refined.json")
+       -> Writes .task/review-opus.json
 
-    PLAN_ITERATION = $("${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" get-plan-review-iteration)
+       IF needs_changes -> Resume planner to fix, restart loop
+       IF needs_clarification -> AskUserQuestion, resume planner
+
+    3. CODEX REVIEW (FINAL GATE)
+       Skill(review-codex)
+       -> Writes .task/review-codex.json
+
+       IF approved -> EXIT loop, proceed to implementation
+       IF needs_changes -> Resume planner to fix, go back to step 1
+       IF needs_clarification -> AskUserQuestion, then continue
+
+    PLAN_ITERATION++
 ```
 
-**Check limit before each iteration:**
+### Step 9: Validate Before Implementation
 
-```bash
-if [[ $("${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" exceeded-plan-review-limit) == "1" ]]; then
-  echo "Plan review loop exceeded limit. Asking user for guidance."
-  # ASK user if they want to continue or abort
-fi
-```
-
-**IMPORTANT:** You CANNOT proceed to implementation until ALL plan reviews are approved.
-The state-manager.sh will block transition to `implementing` or `implementing_loop` states
-if any plan review is missing or not approved.
-
-**Verify before implementation:**
+**CRITICAL:** You CANNOT proceed to implementation until ALL reviews approve.
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" validate-plan-reviews
 ```
 
-This command will fail with a detailed error if any reviews are incomplete.
+This command will fail with detailed error if any reviews are incomplete.
 
 ---
 
-## Phase 3: Implementation
+## Phase 4: Implementation (Ralph Loop)
 
-### Step 7: Check Implementation Mode
-
-Read the implementation mode from `.task/plan-refined.json`:
+### Step 10: Check Implementation Mode
 
 ```bash
 MODE=$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .implementation.mode)
@@ -200,11 +237,11 @@ MODE=$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.jso
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set implementing "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .id)"
 ```
 
-1. **Invoke /implement-sonnet**
-2. Run single review cycle (sonnet → opus → codex)
+1. Load and spawn implementer agent
+2. Run single review cycle
 3. Run tests
-4. If all pass → complete
-5. If issues → fix once, then complete (no loop)
+4. If all pass -> complete
+5. If issues -> fix once, then complete
 
 ### IF mode == "ralph-loop": TDD Ralph Loop
 
@@ -212,7 +249,7 @@ MODE=$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.jso
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set implementing_loop "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .id)"
 ```
 
-**Initialize loop state:**
+### Step 11: Initialize Loop State
 
 Write `.task/loop-state.json`:
 ```json
@@ -222,60 +259,76 @@ Write `.task/loop-state.json`:
   "max_iterations": 10,
   "completion_promise": "<promise>IMPLEMENTATION_COMPLETE</promise>",
   "plan_path": ".task/plan-refined.json",
+  "implementer_agent_id": null,
   "started_at": "ISO8601"
 }
 ```
 
-**Execute the Ralph Loop:**
+### Step 12: Execute Ralph Loop
 
-The stop hook (`hooks/implementation-stop-hook.js`) will intercept exit attempts and verify:
+```
+WHILE iteration < max_iterations:
 
-1. **Check review files**: Read existing `.task/review-*.json` files for status
-2. **Run test commands** from plan (in project directory)
-3. **Verify completion criteria**:
-   - All review files have status == "approved"
-   - All test commands pass (exit code from config, default 0)
-   - Success/failure patterns match (if defined in plan)
+    1. SPAWN/RESUME IMPLEMENTER
+       Load: ${CLAUDE_PLUGIN_ROOT}/agents/implementer.md
 
-**IMPORTANT:** The hook READS review files - it does NOT run the review skills.
-You must invoke `/review-sonnet`, `/review-opus`, `/review-codex` yourself before attempting to exit.
+       IF first iteration:
+         Task(subagent_type: "general-purpose", model: "sonnet", prompt: "[agent prompt]")
+         Save agent_id to loop-state.json
+       ELSE:
+         Task(resume: agent_id, prompt: "Fix issues: [feedback from reviews]. Continue implementing.")
 
-**IF criteria met:**
-- Output: `<promise>IMPLEMENTATION_COMPLETE</promise>`
-- Hook allows exit
+    2. READ IMPLEMENTATION RESULT
+       Read: .task/impl-result.json
 
-**IF criteria NOT met:**
-- Hook blocks exit
-- Re-feeds the implementation prompt:
-  ```
-  Continue implementing based on the plan at .task/plan-refined.json
+       IF status == "failed" -> Continue loop with error feedback
 
-  Previous iteration: [N] of [MAX]
-  Review status: [summary of issues]
-  Test status: [pass/fail summary]
+    3. CODE REVIEWS (sequential, NOT resumable - each is fresh analysis)
 
-  Fix the issues and try again.
-  Output <promise>IMPLEMENTATION_COMPLETE</promise> when:
-  - All reviews pass (sonnet, opus, codex approve)
-  - All tests pass (exit code 0)
-  ```
+       a. Sonnet Review:
+          Load: ${CLAUDE_PLUGIN_ROOT}/agents/code-reviewer.md
+          Task(subagent_type: "Explore", model: "sonnet", prompt: "[agent prompt]")
+          -> Writes .task/review-sonnet.json
 
-**Loop continues until:**
-- Completion promise detected AND tests pass AND reviews pass
-- OR max iterations reached (pause and ask user)
+       b. Opus Review:
+          Task(subagent_type: "Explore", model: "opus", prompt: "[agent prompt]")
+          -> Writes .task/review-opus.json
+
+       c. Codex Review (FINAL GATE):
+          Skill(review-codex)
+          -> Writes .task/review-codex.json
+
+    4. RUN TESTS
+       Bash: [test commands from plan.test_plan.commands]
+       Check success/failure patterns
+
+    5. CHECK COMPLETION CRITERIA
+       - All reviews have status: "approved"
+       - All tests pass
+
+       IF all criteria met:
+         Output: <promise>IMPLEMENTATION_COMPLETE</promise>
+         BREAK
+       ELSE:
+         Collect feedback from review files
+         iteration++
+         Continue loop
+
+END WHILE
+```
 
 ---
 
-## Phase 4: Completion
+## Phase 5: Completion
 
-### Step 8: Clean Up Loop State
+### Step 13: Clean Up
 
 ```bash
 rm -f .task/loop-state.json
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set complete "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .id)"
 ```
 
-### Step 9: Report Results
+### Step 14: Report Results
 
 Report to user:
 - What was implemented
@@ -286,39 +339,69 @@ Report to user:
 
 ---
 
-## Ralph Loop Details
+## Worker Signal Protocol
 
-### How the Stop Hook Works
+Workers communicate via `.task/worker-signal.json`:
 
-When Claude tries to exit during `implementing_loop` state:
+```json
+{
+  "worker_id": "requirements-gatherer-abc123",
+  "phase": "requirements|planning|implementation",
+  "status": "needs_input|completed|error|in_progress",
+  "progress": { "step": "current_step", "percent": 75 },
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Which authentication method should we use?",
+      "options": ["JWT", "Session cookies", "OAuth2"],
+      "context": "The plan requires auth but method wasn't specified"
+    }
+  ],
+  "partial_output": {},
+  "agent_id": "abc123",
+  "timestamp": "ISO8601"
+}
+```
 
-1. Hook reads `.task/loop-state.json`
-2. If `active: false` or missing → allow exit
-3. If `iteration >= max_iterations` → allow exit, warn user
-4. Otherwise:
-   - **Read** existing review files (`.task/review-*.json`)
-   - **Run** test commands from plan (changes to project directory first)
-   - Check success/failure patterns from plan config
-   - Check if completion criteria met
-   - If met → allow exit
-   - If not → increment iteration, block exit, return prompt
+### Handling Signals
 
-**Note:** The hook does NOT invoke review skills - it only reads the review result files. You must run the reviews yourself before attempting to exit.
+```
+CHECK_SIGNAL:
+    Read .task/worker-signal.json
 
-### Completion Criteria
+    IF status == "completed":
+        Proceed to next phase
 
-All must be true:
-1. `.task/review-sonnet.json` status == "approved"
-2. `.task/review-opus.json` status == "approved"
-3. `.task/review-codex.json` status == "approved"
-4. All test commands from plan exit with code 0
+    IF status == "needs_input":
+        questions = signal.questions
+        Use AskUserQuestion(questions)
+        Resume worker: Task(resume: signal.agent_id, prompt: "Answers: [answers]")
+        GOTO CHECK_SIGNAL
 
-### Safety Mechanisms
+    IF status == "error":
+        Log error
+        Decide: retry or abort
 
-1. **Max iterations**: Hard limit (default 10, user configurable)
-2. **Conflict detection**: Planning phase flags potential infinite loops
-3. **Cancel command**: `/cancel-loop` to abort at any time
-4. **State file**: Remove `.task/loop-state.json` to stop loop
+    IF status == "in_progress":
+        Wait and check again
+```
+
+---
+
+## Codex Integration
+
+Codex is invoked via the `/review-codex` skill as the final gate:
+
+```
+Skill(review-codex)
+```
+
+The skill handles:
+- Determining review type (plan vs code) based on existing files
+- Proper `--output-schema` for valid JSON output
+- Session management (`resume --last` for subsequent reviews)
+- Detailed prompts ensuring comprehensive review
+- Writing output to `.task/review-codex.json`
 
 ---
 
@@ -329,6 +412,7 @@ All must be true:
 3. **Review before test**: Always run reviews first, then tests
 4. **Accept all feedback**: No debate with reviewers, just fix
 5. **Clear completion criteria**: Tests pass + reviews approve
+6. **Resume for context**: Use resume to preserve worker memory across iterations
 
 ---
 
@@ -336,23 +420,48 @@ All must be true:
 
 ```
 Requirements approved. Starting planning...
-✓ Plan created
-✓ Risk assessment: No conflicts detected
-✓ Plan reviews: approved (2 iterations)
+- Plan created
+- Risk assessment: No conflicts detected
+- Plan reviews: approved (2 iterations)
 
 Starting implementation (ralph-loop mode, max 10 iterations)...
 Iteration 1:
-  ✓ Implementation complete
-  ✗ Sonnet review: 2 issues
+  - Implementation complete
+  - Sonnet review: 2 issues
   - Fixing issues...
 Iteration 2:
-  ✓ Fixes applied
-  ✓ Sonnet review: approved
-  ✓ Opus review: approved
-  ✓ Codex review: approved
-  ✓ Tests: 5 passed, 0 failed
+  - Fixes applied
+  - Sonnet review: approved
+  - Opus review: approved
+  - Codex review: approved
+  - Tests: 5 passed, 0 failed
 
 <promise>IMPLEMENTATION_COMPLETE</promise>
 
-✓ Complete! Feature implemented in 2 iterations.
+Complete! Feature implemented in 2 iterations.
 ```
+
+---
+
+## Emergency Controls
+
+If stuck:
+1. **Cancel command:** `/cancel-loop`
+2. **Delete state file:** `rm .task/loop-state.json`
+3. **Max iterations:** Loop auto-stops at limit
+
+---
+
+## Model Assignment Summary
+
+| Phase | Agent | Model | Reason |
+|-------|-------|-------|--------|
+| Requirements | requirements-gatherer | **opus** | Deep understanding + user interaction |
+| Planning | planner | **opus** | Comprehensive codebase research |
+| Plan Review #1 | plan-reviewer | sonnet | Quick quality check |
+| Plan Review #2 | plan-reviewer | opus | Deep architectural analysis |
+| Plan Review #3 | **Codex** | external | Independent final gate |
+| Implementation | implementer | sonnet | Balanced speed/quality |
+| Code Review #1 | code-reviewer | sonnet | Quick code check |
+| Code Review #2 | code-reviewer | opus | Deep code analysis |
+| Code Review #3 | **Codex** | external | Independent final gate |
