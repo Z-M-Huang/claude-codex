@@ -413,6 +413,7 @@ The skill handles:
 4. **Accept all feedback**: No debate with reviewers, just fix
 5. **Clear completion criteria**: Tests pass + reviews approve
 6. **Resume for context**: Use resume to preserve worker memory across iterations
+7. **NEVER run Codex via Bash**: Always use `Skill(review-codex)` - the skill handles all Codex CLI invocation, schema paths, and session management. Do NOT run `codex exec` directly.
 
 ---
 
