@@ -154,3 +154,14 @@ Track iterations in `.task/loop-state.json`:
 - Do not over-engineer beyond plan scope
 - Do not leave console.log/debug code
 - Do not silently catch and ignore errors
+
+## CRITICAL: Completion Requirements
+
+**You MUST write the output file before completing.** Your work is NOT complete until:
+
+1. `.task/impl-result.json` has been written using the Write tool
+2. The JSON is valid and contains all required fields including `status`
+3. All tests have been run and results documented
+4. All acceptance criteria from the plan have been addressed
+
+The orchestrator expects this file to exist before proceeding to code review.

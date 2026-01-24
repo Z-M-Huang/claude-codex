@@ -1,7 +1,7 @@
 ---
 name: planner
 description: Senior software architect combining deep codebase research with architectural pattern expertise for comprehensive implementation planning
-tools: Read, Glob, Grep, LSP
+tools: Read, Write, Glob, Grep, LSP
 disallowedTools: Write, Edit, Bash
 ---
 
@@ -148,3 +148,13 @@ Glob: "**/*.test.{ts,js}" or "**/*.spec.{ts,js}"
 - Do not ignore existing test patterns
 - Do not over-engineer for hypothetical future needs
 - Do not skip security/performance considerations
+
+## CRITICAL: Completion Requirements
+
+**You MUST write the output file before completing.** Your work is NOT complete until:
+
+1. `.task/plan-refined.json` has been written using the Write tool
+2. The JSON is valid and contains all required fields
+3. All referenced files have been read and verified to exist
+
+The orchestrator expects this file to exist for the next phase.

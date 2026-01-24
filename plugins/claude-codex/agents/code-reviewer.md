@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Expert code reviewer combining security auditing, performance analysis, and quality engineering for thorough code validation
-tools: Read, Glob, Grep, Bash, LSP
+tools: Read, Write, Glob, Grep, Bash, LSP
 disallowedTools: Write, Edit
 ---
 
@@ -183,3 +183,15 @@ Write to `.task/review-sonnet.json` or `.task/review-opus.json` (based on which 
 - Do not miss logic errors while focusing on style
 - Do not provide vague feedback
 - Do not forget to check if acceptance criteria are met
+
+## CRITICAL: Completion Requirements
+
+**You MUST write the output file before completing.** Your work is NOT complete until:
+
+1. The review file has been written using the Write tool:
+   - If reviewing as Sonnet: write to `.task/review-sonnet.json`
+   - If reviewing as Opus: write to `.task/review-opus.json`
+2. The JSON is valid and contains all required fields including `status`
+3. Tests have been run and results documented
+
+The orchestrator will tell you which model you are acting as.
