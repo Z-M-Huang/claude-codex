@@ -321,10 +321,19 @@ Skill(review-codex)
 #### "Fix [Phase] Issues - Iteration N" (Dynamic Fix Tasks)
 ```
 # Resume the appropriate agent with feedback
+# IMPORTANT: Specify the correct model for each agent type
 IF plan fix:
-  Task(resume: planner_agent_id, prompt: "Fix issues: [feedback]. Update .task/plan-refined.json")
+  Task(
+    resume: planner_agent_id,
+    model: "opus",  # Planner uses Opus for deep analysis
+    prompt: "Fix issues: [feedback]. Update .task/plan-refined.json"
+  )
 IF code fix:
-  Task(resume: implementer_agent_id, prompt: "Fix issues: [feedback]. Update implementation.")
+  Task(
+    resume: implementer_agent_id,
+    model: "sonnet",  # Implementer uses Sonnet for balanced speed/quality
+    prompt: "Fix issues: [feedback]. Update implementation."
+  )
 ```
 
 ---
@@ -436,7 +445,14 @@ CHECK_SIGNAL:
     IF status == "needs_input":
         questions = signal.questions
         answers = AskUserQuestion(questions)
-        Task(resume: signal.agent_id, prompt: "Answers: [answers]")
+        # Resume with same model as original task:
+        # - requirements/planning phases: model: "opus"
+        # - implementation phase: model: "sonnet"
+        Task(
+          resume: signal.agent_id,
+          model: [match original task model],
+          prompt: "Answers: [answers]"
+        )
         GOTO CHECK_SIGNAL
 
     IF status == "error":
