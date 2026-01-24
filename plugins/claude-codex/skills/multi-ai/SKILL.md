@@ -187,22 +187,51 @@ WHILE PLAN_ITERATION < MAX_PLAN_ITERATIONS:
 
     1. SONNET REVIEW
        Load: ${CLAUDE_PLUGIN_ROOT}/agents/plan-reviewer.md
-       Task(subagent_type: "Plan", model: "sonnet", prompt: "[agent prompt] Review .task/plan-refined.json")
+       Task(
+         subagent_type: "claude-codex:plan-reviewer",
+         model: "sonnet",
+         prompt: "
+           [Paste agent prompt from plan-reviewer.md]
+
+           ## Context Files (READ THESE FIRST)
+           - User story: .task/user-story.json (requirements + acceptance criteria)
+           - Plan to review: .task/plan-refined.json
+
+           ## Output
+           Write review to .task/review-sonnet.json (you are acting as Sonnet)
+         "
+       )
        -> Writes .task/review-sonnet.json
 
        IF needs_changes -> Resume planner to fix, restart loop
        IF needs_clarification -> AskUserQuestion, resume planner
 
     2. OPUS REVIEW
-       Task(subagent_type: "Plan", model: "opus", prompt: "[agent prompt] Review .task/plan-refined.json")
+       Task(
+         subagent_type: "claude-codex:plan-reviewer",
+         model: "opus",
+         prompt: "
+           [Paste agent prompt from plan-reviewer.md]
+
+           ## Context Files (READ THESE FIRST)
+           - User story: .task/user-story.json (requirements + acceptance criteria)
+           - Plan to review: .task/plan-refined.json
+
+           ## Output
+           Write review to .task/review-opus.json (you are acting as Opus)
+         "
+       )
        -> Writes .task/review-opus.json
 
        IF needs_changes -> Resume planner to fix, restart loop
        IF needs_clarification -> AskUserQuestion, resume planner
 
-    3. CODEX REVIEW (FINAL GATE)
+    3. **MANDATORY: CODEX REVIEW (FINAL GATE)**
+       YOU MUST RUN THIS - DO NOT SKIP:
        Skill(review-codex)
        -> Writes .task/review-codex.json
+
+       **WARNING:** You CANNOT proceed to implementation without Codex approval.
 
        IF approved -> EXIT loop, proceed to implementation
        IF needs_changes -> Resume planner to fix, go back to step 1
@@ -291,24 +320,76 @@ WHILE iteration < max_iterations:
 
        a. Sonnet Review:
           Load: ${CLAUDE_PLUGIN_ROOT}/agents/code-reviewer.md
-          Task(subagent_type: "Explore", model: "sonnet", prompt: "[agent prompt]")
+          Task(
+            subagent_type: "claude-codex:code-reviewer",
+            model: "sonnet",
+            prompt: "
+              [Paste agent prompt from code-reviewer.md]
+
+              ## Context Files (READ THESE FIRST)
+              - User story: .task/user-story.json (requirements + acceptance criteria)
+              - Approved plan: .task/plan-refined.json (what SHOULD be implemented)
+              - Implementation result: .task/impl-result.json (what WAS implemented)
+
+              ## Your Task
+              Review the implementation against the approved plan. Check that:
+              1. All planned steps were implemented correctly
+              2. Acceptance criteria from user story are met
+              3. No scope creep beyond the plan
+              4. Security and quality standards are met
+
+              ## Output
+              Write review to .task/review-sonnet.json (you are acting as Sonnet)
+            "
+          )
           -> Writes .task/review-sonnet.json
 
        b. Opus Review:
-          Task(subagent_type: "Explore", model: "opus", prompt: "[agent prompt]")
+          Task(
+            subagent_type: "claude-codex:code-reviewer",
+            model: "opus",
+            prompt: "
+              [Paste agent prompt from code-reviewer.md]
+
+              ## Context Files (READ THESE FIRST)
+              - User story: .task/user-story.json (requirements + acceptance criteria)
+              - Approved plan: .task/plan-refined.json (what SHOULD be implemented)
+              - Implementation result: .task/impl-result.json (what WAS implemented)
+
+              ## Your Task
+              Review the implementation against the approved plan. Check that:
+              1. All planned steps were implemented correctly
+              2. Acceptance criteria from user story are met
+              3. No scope creep beyond the plan
+              4. Security and quality standards are met
+
+              ## Output
+              Write review to .task/review-opus.json (you are acting as Opus)
+            "
+          )
           -> Writes .task/review-opus.json
 
-       c. Codex Review (FINAL GATE):
+       c. **MANDATORY: Codex Review (FINAL GATE)**
+          YOU MUST RUN THIS - DO NOT SKIP:
           Skill(review-codex)
           -> Writes .task/review-codex.json
+
+          **WARNING:** Pipeline is NOT complete without Codex review.
+          If you skip this step, the implementation is NOT validated.
 
     4. RUN TESTS
        Bash: [test commands from plan.test_plan.commands]
        Check success/failure patterns
 
     5. CHECK COMPLETION CRITERIA
-       - All reviews have status: "approved"
+
+       **REQUIRED: Verify ALL THREE code reviews exist and are approved:**
+       - .task/review-sonnet.json exists AND status == "approved"
+       - .task/review-opus.json exists AND status == "approved"
+       - .task/review-codex.json exists AND status == "approved"
        - All tests pass
+
+       **DO NOT declare complete if review-codex.json is missing!**
 
        IF all criteria met:
          Output: <promise>IMPLEMENTATION_COMPLETE</promise>
@@ -325,14 +406,31 @@ END WHILE
 
 ## Phase 5: Completion
 
-### Step 13: Clean Up
+### Step 13: Validate Completion (REQUIRED)
+
+**Before declaring complete, verify ALL of these files exist:**
+
+```
+CHECKLIST (all must be true):
+[ ] .task/user-story.json exists
+[ ] .task/plan-refined.json exists
+[ ] .task/review-sonnet.json exists AND status == "approved"
+[ ] .task/review-opus.json exists AND status == "approved"
+[ ] .task/review-codex.json exists AND status == "approved"  <- CODEX GATE
+[ ] .task/impl-result.json exists AND status == "completed"
+[ ] All test commands passed
+```
+
+**STOP:** If `.task/review-codex.json` is missing, you skipped the Codex gate. Go back and run `Skill(review-codex)`.
+
+### Step 14: Clean Up
 
 ```bash
 rm -f .task/loop-state.json
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" set complete "$(bun ${CLAUDE_PLUGIN_ROOT}/scripts/json-tool.ts get .task/plan-refined.json .id)"
 ```
 
-### Step 14: Report Results
+### Step 15: Report Results
 
 Report to user:
 - What was implemented
@@ -419,6 +517,7 @@ The skill handles:
 6. **Clear completion criteria**: Tests pass + reviews approve
 7. **Resume for context**: Use resume to preserve worker memory across iterations
 8. **NEVER run Codex via Bash**: Always use `Skill(review-codex)` - the skill handles all Codex CLI invocation, schema paths, and session management. Do NOT run `codex exec` directly.
+9. **MANDATORY Codex gate**: You MUST run `Skill(review-codex)` for BOTH plan reviews AND code reviews. The pipeline is NOT complete without Codex approval. If `.task/review-codex.json` doesn't exist, you have NOT finished the review phase.
 
 ---
 
