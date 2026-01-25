@@ -1,6 +1,6 @@
 {
   "name": "claude-codex",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Multi-AI orchestration pipeline with TDD-driven Ralph Loop using Task + Resume architecture",
   "author": {
     "name": "Z-M-Huang",

@@ -1,6 +1,4 @@
-.task/*
-!.task/state.json
-!.task/tasks.json
+.task
 review/
 *.log
 pipeline.config.local.json

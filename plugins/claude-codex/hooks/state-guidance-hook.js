@@ -15,6 +15,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// Import version check module
+const { checkForUpdate } = require('./version-check.js');
+
 // Get directories from environment
 const PROJECT_DIR = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const TASK_DIR = path.join(PROJECT_DIR, '.task');
@@ -66,30 +69,18 @@ function hasPipelineTasks() {
 }
 
 /**
- * Main hook logic
+ * Compute guidance message based on current state
  */
-function main() {
-  // Check if state file exists
-  const state = readJson(STATE_FILE);
-  if (!state) {
-    // No state file means no active pipeline - allow without guidance
-    process.exit(0);
-  }
-
-  const reviewStatus = checkReviewStatus();
+function computeGuidance(state, reviewStatus, pipelineTasksExist) {
   const allApproved = Object.values(reviewStatus).every(s => s === 'approved');
-  const currentStatus = state.status || 'idle';
-  const pipelineTasksExist = hasPipelineTasks();
+  const currentStatus = state?.status || 'idle';
 
-  let guidance = '';
-
-  // Provide state-specific guidance
   switch (currentStatus) {
     case 'plan_refining':
     case 'plan_reviewing':
       if (!allApproved) {
         const statusStr = formatReviewStatus(reviewStatus);
-        guidance = [
+        return [
           '',
           '**PIPELINE STATE: Plan Review Phase**',
           '',
@@ -104,18 +95,14 @@ function main() {
           ''
         ].join('\n');
       }
-      break;
+      return '';
 
     case 'plan_drafting':
-      // Just created plan, remind about review phase
-      // BUT: if all reviews are already approved, state is stale - skip guidance
       if (allApproved) {
-        // State is stale - reviews passed but state wasn't updated
-        // Don't show confusing guidance
-        break;
+        return ''; // State is stale - reviews passed
       }
       if (pipelineTasksExist) {
-        guidance = [
+        return [
           '',
           '**PIPELINE STATE: Plan Created**',
           '',
@@ -125,26 +112,23 @@ function main() {
           '3. Mark task completed, loop back to step 1',
           ''
         ].join('\n');
-      } else {
-        guidance = [
-          '',
-          '**PIPELINE STATE: Plan Drafting**',
-          '',
-          'After creating plan-refined.json:',
-          '1. Create pipeline task chain with TaskCreate (if not already done)',
-          '2. Use TaskList() to find next task and execute it',
-          '3. Reviews are enforced via blockedBy dependencies',
-          ''
-        ].join('\n');
       }
-      break;
+      return [
+        '',
+        '**PIPELINE STATE: Plan Drafting**',
+        '',
+        'After creating plan-refined.json:',
+        '1. Create pipeline task chain with TaskCreate (if not already done)',
+        '2. Use TaskList() to find next task and execute it',
+        '3. Reviews are enforced via blockedBy dependencies',
+        ''
+      ].join('\n');
 
     case 'implementing':
     case 'implementing_loop':
-      // Already in implementation - check that reviews were done
       if (!allApproved) {
         const statusStr = formatReviewStatus(reviewStatus);
-        guidance = [
+        return [
           '',
           '**WARNING: Implementation started without approved reviews!**',
           '',
@@ -155,13 +139,11 @@ function main() {
           ''
         ].join('\n');
       }
-      break;
+      return '';
 
     case 'idle':
-      // Idle state - no active pipeline
-      // If there are pipeline tasks but state is idle, something may be off
       if (pipelineTasksExist) {
-        guidance = [
+        return [
           '',
           '**PIPELINE STATE: Idle (with existing tasks)**',
           '',
@@ -170,23 +152,60 @@ function main() {
           ''
         ].join('\n');
       }
-      // Otherwise, no guidance needed for idle state
-      break;
+      return '';
 
     default:
-      // Other states (requirements_gathering, complete, etc.)
-      // No special guidance needed
-      break;
+      return '';
+  }
+}
+
+/**
+ * Emit system message to stdout as JSON
+ */
+function emitSystemMessage(updateNotification, guidance) {
+  let message = '';
+  if (updateNotification) {
+    message += `\n${updateNotification}\n`;
+  }
+  if (guidance) {
+    message += guidance;
   }
 
-  // If we have guidance, output it as a system message
-  if (guidance) {
-    // UserPromptSubmit hooks can modify the prompt by outputting to stdout
-    // The guidance will be prepended to Claude's context
+  if (message) {
     console.log(JSON.stringify({
-      systemMessage: guidance
+      systemMessage: message
     }));
   }
+}
+
+/**
+ * Main hook logic - orchestrates version check and state guidance
+ */
+function main() {
+  // Check for plugin updates (synchronous, non-blocking)
+  let updateNotification = null;
+  try {
+    updateNotification = checkForUpdate();
+  } catch {
+    // Silent fail - version check is not critical
+  }
+
+  // Check if state file exists
+  const state = readJson(STATE_FILE);
+  if (!state) {
+    // No state file means no active pipeline
+    // But still show update notification if available
+    emitSystemMessage(updateNotification, '');
+    process.exit(0);
+  }
+
+  // Compute guidance based on current state
+  const reviewStatus = checkReviewStatus();
+  const pipelineTasksExist = hasPipelineTasks();
+  const guidance = computeGuidance(state, reviewStatus, pipelineTasksExist);
+
+  // Emit combined message
+  emitSystemMessage(updateNotification, guidance);
 
   // Always allow the prompt to proceed
   process.exit(0);
