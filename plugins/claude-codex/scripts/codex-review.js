@@ -27,7 +27,7 @@ const os = require('os');
 
 // ================== CONFIGURATION ==================
 
-const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 const TASK_DIR = '.task';
 const STDERR_FILE = path.join(TASK_DIR, 'codex_stderr.log');
 

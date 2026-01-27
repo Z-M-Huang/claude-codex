@@ -181,7 +181,7 @@ Read the output file based on review type and report the result:
 | 0 | Success | Read output file, report results |
 | 1 | Validation error | Report missing file or invalid output |
 | 2 | Codex error | Report "Install Codex" or "Run codex auth" |
-| 3 | Timeout | Report "Review timed out after 5 minutes" |
+| 3 | Timeout | Report "Review timed out after 20 minutes" |
 
 ### Common Errors
 
@@ -244,7 +244,7 @@ node "{PLUGIN_ROOT}/scripts/codex-review.js" --type code --plugin-root "{PLUGIN_
 
 The script handles:
 - Platform detection (Windows/macOS/Linux)
-- Timeout (5 minutes)
+- Timeout (20 minutes)
 - Input validation
 - Session management (first vs resume)
 - Session expiry recovery
