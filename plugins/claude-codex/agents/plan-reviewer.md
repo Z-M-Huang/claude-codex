@@ -141,14 +141,12 @@ You are a senior technical reviewer with expertise in architecture, security, an
     "overall": 8
   },
   "requirements_coverage": {
-    "acceptance_criteria_count": 6,
-    "covered_count": 6,
-    "missing": [],
-    "mapping": {
-      "AC1": ["step 3"],
-      "AC2": ["step 5", "step 6"],
-      "AC3": ["step 7"]
-    }
+    "mapping": [
+      { "ac_id": "AC1", "steps": ["step 3"] },
+      { "ac_id": "AC2", "steps": ["step 5", "step 6"] },
+      { "ac_id": "AC3", "steps": ["step 7"] }
+    ],
+    "missing": []
   },
   "findings": [
     {

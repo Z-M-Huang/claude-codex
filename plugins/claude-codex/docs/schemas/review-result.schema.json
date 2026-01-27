@@ -9,7 +9,7 @@
     "acceptance_criteria_verification": {
       "type": "object",
       "description": "Verifies each acceptance criterion from user-story.json against the implementation",
-      "required": ["details"],
+      "required": ["total", "verified", "missing", "details"],
       "properties": {
         "total": {
           "type": "number",
@@ -25,12 +25,16 @@
           "description": "List of AC IDs not implemented"
         },
         "details": {
-          "type": "object",
-          "description": "Key: AC ID (e.g., 'AC1'), Value: verification result",
-          "additionalProperties": {
+          "type": "array",
+          "description": "Array of AC verification results",
+          "items": {
             "type": "object",
-            "required": ["status"],
+            "required": ["ac_id", "status", "evidence", "notes"],
             "properties": {
+              "ac_id": {
+                "type": "string",
+                "description": "Acceptance criterion ID (e.g., 'AC1')"
+              },
               "status": {
                 "type": "string",
                 "enum": ["IMPLEMENTED", "NOT_IMPLEMENTED", "PARTIAL"],

@@ -320,10 +320,10 @@ SubagentStop blocking:
   "summary": "...",
   "feedback": "...",
   "requirements_coverage": {
-    "mapping": {
-      "AC1": ["Step 1: Setup authentication..."],
-      "AC2": ["Step 3: Add validation...", "Step 4: Error handling"]
-    },
+    "mapping": [
+      { "ac_id": "AC1", "steps": ["Step 1: Setup authentication..."] },
+      { "ac_id": "AC2", "steps": ["Step 3: Add validation...", "Step 4: Error handling"] }
+    ],
     "missing": []
   }
 }
@@ -341,10 +341,13 @@ SubagentStop blocking:
   "summary": "...",
   "feedback": "...",
   "acceptance_criteria_verification": {
-    "details": {
-      "AC1": { "status": "IMPLEMENTED", "evidence": "src/auth.ts:45" },
-      "AC2": { "status": "NOT_IMPLEMENTED", "notes": "Missing validation" }
-    }
+    "total": 2,
+    "verified": 1,
+    "missing": ["AC2"],
+    "details": [
+      { "ac_id": "AC1", "status": "IMPLEMENTED", "evidence": "src/auth.ts:45", "notes": "" },
+      { "ac_id": "AC2", "status": "NOT_IMPLEMENTED", "evidence": "", "notes": "Missing validation" }
+    ]
   }
 }
 ```

@@ -15,11 +15,23 @@
       "required": ["mapping", "missing"],
       "properties": {
         "mapping": {
-          "type": "object",
-          "description": "Key: AC ID (e.g., 'AC1'), Value: plan step(s) that address it (array of step references)",
-          "additionalProperties": {
-            "type": "array",
-            "items": { "type": "string" }
+          "type": "array",
+          "description": "Array of AC-to-steps mappings",
+          "items": {
+            "type": "object",
+            "required": ["ac_id", "steps"],
+            "properties": {
+              "ac_id": {
+                "type": "string",
+                "description": "Acceptance criterion ID (e.g., 'AC1')"
+              },
+              "steps": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Plan step(s) that address this AC"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "missing": {

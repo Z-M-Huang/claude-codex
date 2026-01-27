@@ -91,7 +91,8 @@ export function validatePlanReview(review, userStory) {
     };
   }
 
-  const coveredACs = Object.keys(coverage.mapping || {});
+  // mapping is now an array of {ac_id, steps}
+  const coveredACs = (coverage.mapping || []).map(m => m.ac_id);
   const missingACs = acIds.filter(id => !coveredACs.includes(id));
 
   if (missingACs.length > 0) {
@@ -123,7 +124,8 @@ export function validateCodeReview(review, userStory) {
     };
   }
 
-  const verifiedACs = Object.keys(verification.details || {});
+  // details is now an array of {ac_id, status, evidence, notes}
+  const verifiedACs = (verification.details || []).map(d => d.ac_id);
   const missingACs = acIds.filter(id => !verifiedACs.includes(id));
 
   if (missingACs.length > 0) {
@@ -133,9 +135,9 @@ export function validateCodeReview(review, userStory) {
     };
   }
 
-  const notFullyImplemented = Object.entries(verification.details || {})
-    .filter(([, v]) => v.status === 'NOT_IMPLEMENTED' || v.status === 'PARTIAL')
-    .map(([k]) => k);
+  const notFullyImplemented = (verification.details || [])
+    .filter(d => d.status === 'NOT_IMPLEMENTED' || d.status === 'PARTIAL')
+    .map(d => d.ac_id);
 
   if (review.status === 'approved' && notFullyImplemented.length > 0) {
     return {

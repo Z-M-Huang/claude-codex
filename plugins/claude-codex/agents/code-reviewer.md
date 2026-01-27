@@ -153,11 +153,11 @@ You are a senior code reviewer with expertise in security, performance, and qual
     "total": 6,
     "verified": 6,
     "missing": [],
-    "details": {
-      "AC1": {"status": "IMPLEMENTED", "evidence": "src/auth.ts:42"},
-      "AC2": {"status": "IMPLEMENTED", "evidence": "src/api.ts:15"},
-      "AC3": {"status": "NOT_IMPLEMENTED", "notes": "Missing implementation"}
-    }
+    "details": [
+      { "ac_id": "AC1", "status": "IMPLEMENTED", "evidence": "src/auth.ts:42", "notes": "" },
+      { "ac_id": "AC2", "status": "IMPLEMENTED", "evidence": "src/api.ts:15", "notes": "" },
+      { "ac_id": "AC3", "status": "NOT_IMPLEMENTED", "evidence": "", "notes": "Missing implementation" }
+    ]
   },
   "findings": [
     {
