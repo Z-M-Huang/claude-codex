@@ -115,7 +115,7 @@ This command orchestrates specialized agents:
 
 ### Task-Based Pipeline Enforcement
 
-The pipeline uses **task dependencies** and **hook validation** (v1.3.0):
+The pipeline uses **task dependencies** and **hook validation** (v1.3.1):
 
 ```
 ┌────────────────────────────────────────────────────┐

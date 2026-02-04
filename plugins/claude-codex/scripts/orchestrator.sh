@@ -421,16 +421,17 @@ reset_pipeline() {
 
   log_warn "Resetting pipeline..."
 
-  # Remove all artifact files
-  rm -f "$TASK_DIR/user-story.json"
-  rm -f "$TASK_DIR/plan.json" "$TASK_DIR/plan-refined.json"
-  rm -f "$TASK_DIR/impl-result.json"
-  rm -f "$TASK_DIR/review-sonnet.json" "$TASK_DIR/review-opus.json" "$TASK_DIR/review-codex.json"
-  rm -f "$TASK_DIR/code-review-sonnet.json" "$TASK_DIR/code-review-opus.json" "$TASK_DIR/code-review-codex.json"
-  rm -f "$TASK_DIR/pipeline-tasks.json"
-  rm -f "$TASK_DIR/user-request.txt"
-  rm -f "$TASK_DIR/.codex-session-active"
-  rm -f "$TASK_DIR/.codex-session-plan" "$TASK_DIR/.codex-session-code"
+  # Release lock before nuking the directory (lock file is inside .task)
+  release_lock
+
+  # Remove entire .task directory and recreate clean
+  rm -rf "$TASK_DIR"
+  mkdir -p "$TASK_DIR"
+
+  # Initialize with template state
+  if [[ -f "$PLUGIN_ROOT/.task.template/state.json" ]]; then
+    cp "$PLUGIN_ROOT/.task.template/state.json" "$TASK_DIR/state.json"
+  fi
 
   log_success "Pipeline reset complete"
 }

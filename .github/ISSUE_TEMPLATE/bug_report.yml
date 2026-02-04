@@ -12,7 +12,7 @@ body:
     attributes:
       label: Plugin Version
       description: Which version of Claude Codex are you using?
-      placeholder: "1.3"
+      placeholder: "1.3.1"
     validations:
       required: true
 
