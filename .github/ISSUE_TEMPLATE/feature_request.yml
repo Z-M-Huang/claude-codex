@@ -40,9 +40,9 @@ body:
       description: Which part of Claude Codex does this relate to?
       options:
         - Multi-AI Pipeline (/multi-ai)
-        - Ralph Loop (TDD implementation)
-        - Review Skills (/review-sonnet, /review-opus, /review-codex)
-        - User Story (/user-story)
+        - Pipeline Orchestration
+        - Review Agents (plan-reviewer, code-reviewer, codex-reviewer)
+        - Requirements Gathering (team-based)
         - Other
     validations:
       required: true

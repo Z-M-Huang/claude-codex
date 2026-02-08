@@ -1,12 +1,12 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'fs';
+import { mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 
 // Import functions to test
 import {
   validatePlanReview,
   validateCodeReview
-} from './review-validator.js';
+} from './review-validator.ts';
 
 const TEST_DIR = join(import.meta.dir, '.test-task');
 
@@ -22,7 +22,7 @@ describe('review-validator', () => {
 
   describe('validateCodeReview', () => {
     test('returns null (valid) when no ACs in user story', () => {
-      const userStory = { acceptance_criteria: [] };
+      const userStory = { acceptance_criteria: [] as Array<{ id: string }> };
       const review = { status: 'approved' };
 
       const result = validateCodeReview(review, userStory);
@@ -48,8 +48,8 @@ describe('review-validator', () => {
 
       const result = validateCodeReview(review, userStory);
       expect(result).not.toBeNull();
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('acceptance_criteria_verification');
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('acceptance_criteria_verification');
     });
 
     test('blocks when not all ACs are verified', () => {
@@ -59,18 +59,18 @@ describe('review-validator', () => {
       const review = {
         status: 'approved',
         acceptance_criteria_verification: {
-          details: {
-            'AC1': { status: 'IMPLEMENTED' },
-            'AC2': { status: 'IMPLEMENTED' }
+          details: [
+            { ac_id: 'AC1', status: 'IMPLEMENTED', evidence: '', notes: '' },
+            { ac_id: 'AC2', status: 'IMPLEMENTED', evidence: '', notes: '' }
             // Missing AC3
-          }
+          ]
         }
       };
 
       const result = validateCodeReview(review, userStory);
       expect(result).not.toBeNull();
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('AC3');
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('AC3');
     });
 
     test('blocks approval with unimplemented ACs', () => {
@@ -80,18 +80,18 @@ describe('review-validator', () => {
       const review = {
         status: 'approved',
         acceptance_criteria_verification: {
-          details: {
-            'AC1': { status: 'IMPLEMENTED' },
-            'AC2': { status: 'NOT_IMPLEMENTED' }
-          }
+          details: [
+            { ac_id: 'AC1', status: 'IMPLEMENTED', evidence: '', notes: '' },
+            { ac_id: 'AC2', status: 'NOT_IMPLEMENTED', evidence: '', notes: '' }
+          ]
         }
       };
 
       const result = validateCodeReview(review, userStory);
       expect(result).not.toBeNull();
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('AC2');
-      expect(result.reason).toContain('needs_changes');
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('AC2');
+      expect(result!.reason).toContain('needs_changes');
     });
 
     test('allows valid approval with all ACs implemented', () => {
@@ -101,10 +101,10 @@ describe('review-validator', () => {
       const review = {
         status: 'approved',
         acceptance_criteria_verification: {
-          details: {
-            'AC1': { status: 'IMPLEMENTED' },
-            'AC2': { status: 'IMPLEMENTED' }
-          }
+          details: [
+            { ac_id: 'AC1', status: 'IMPLEMENTED', evidence: '', notes: '' },
+            { ac_id: 'AC2', status: 'IMPLEMENTED', evidence: '', notes: '' }
+          ]
         }
       };
 
@@ -119,10 +119,10 @@ describe('review-validator', () => {
       const review = {
         status: 'needs_changes',
         acceptance_criteria_verification: {
-          details: {
-            'AC1': { status: 'IMPLEMENTED' },
-            'AC2': { status: 'NOT_IMPLEMENTED' }
-          }
+          details: [
+            { ac_id: 'AC1', status: 'IMPLEMENTED', evidence: '', notes: '' },
+            { ac_id: 'AC2', status: 'NOT_IMPLEMENTED', evidence: '', notes: '' }
+          ]
         }
       };
 
@@ -137,18 +137,18 @@ describe('review-validator', () => {
       const review = {
         status: 'approved',
         acceptance_criteria_verification: {
-          details: {
-            'AC1': { status: 'IMPLEMENTED' },
-            'AC2': { status: 'PARTIAL' }
-          }
+          details: [
+            { ac_id: 'AC1', status: 'IMPLEMENTED', evidence: '', notes: '' },
+            { ac_id: 'AC2', status: 'PARTIAL', evidence: '', notes: '' }
+          ]
         }
       };
 
       const result = validateCodeReview(review, userStory);
       expect(result).not.toBeNull();
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('AC2');
-      expect(result.reason).toContain('incomplete');
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('AC2');
+      expect(result!.reason).toContain('incomplete');
     });
 
     test('allows needs_changes with PARTIAL ACs', () => {
@@ -158,10 +158,10 @@ describe('review-validator', () => {
       const review = {
         status: 'needs_changes',
         acceptance_criteria_verification: {
-          details: {
-            'AC1': { status: 'IMPLEMENTED' },
-            'AC2': { status: 'PARTIAL' }
-          }
+          details: [
+            { ac_id: 'AC1', status: 'IMPLEMENTED', evidence: '', notes: '' },
+            { ac_id: 'AC2', status: 'PARTIAL', evidence: '', notes: '' }
+          ]
         }
       };
 
@@ -172,7 +172,7 @@ describe('review-validator', () => {
 
   describe('validatePlanReview', () => {
     test('returns null (valid) when no ACs in user story', () => {
-      const userStory = { acceptance_criteria: [] };
+      const userStory = { acceptance_criteria: [] as Array<{ id: string }> };
       const review = { status: 'approved' };
 
       const result = validatePlanReview(review, userStory);
@@ -191,8 +191,8 @@ describe('review-validator', () => {
 
       const result = validatePlanReview(review, userStory);
       expect(result).not.toBeNull();
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('requirements_coverage');
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('requirements_coverage');
     });
 
     test('blocks when not all ACs are covered', () => {
@@ -202,18 +202,18 @@ describe('review-validator', () => {
       const review = {
         status: 'approved',
         requirements_coverage: {
-          mapping: {
-            'AC1': 'Step 1',
-            'AC2': 'Step 2'
+          mapping: [
+            { ac_id: 'AC1', steps: ['Step 1'] },
+            { ac_id: 'AC2', steps: ['Step 2'] }
             // Missing AC3
-          }
+          ]
         }
       };
 
       const result = validatePlanReview(review, userStory);
       expect(result).not.toBeNull();
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('AC3');
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('AC3');
     });
 
     test('blocks approval with missing requirements', () => {
@@ -223,18 +223,18 @@ describe('review-validator', () => {
       const review = {
         status: 'approved',
         requirements_coverage: {
-          mapping: {
-            'AC1': 'Step 1',
-            'AC2': 'Step 2'
-          },
+          mapping: [
+            { ac_id: 'AC1', steps: ['Step 1'] },
+            { ac_id: 'AC2', steps: ['Step 2'] }
+          ],
           missing: ['AC2']
         }
       };
 
       const result = validatePlanReview(review, userStory);
       expect(result).not.toBeNull();
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('AC2');
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('AC2');
     });
 
     test('allows valid approval with all ACs covered', () => {
@@ -244,10 +244,10 @@ describe('review-validator', () => {
       const review = {
         status: 'approved',
         requirements_coverage: {
-          mapping: {
-            'AC1': 'Step 1',
-            'AC2': 'Step 2'
-          },
+          mapping: [
+            { ac_id: 'AC1', steps: ['Step 1'] },
+            { ac_id: 'AC2', steps: ['Step 2'] }
+          ],
           missing: []
         }
       };

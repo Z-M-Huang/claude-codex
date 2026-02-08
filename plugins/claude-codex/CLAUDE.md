@@ -17,6 +17,10 @@
 Multi-Session Orchestrator Pipeline (Task-Based Enforcement)
   |
   +-- Orchestrator (Main Session)
+  |     +-- Step 0: Create Pipeline Team (TeamCreate)
+  |     |     +-- Idempotent: TeamDelete + TeamCreate("pipeline-{BASENAME}-{HASH}")
+  |     |     +-- Verify: TaskList() probe
+  |     |     +-- Fails fast if task tools unavailable
   |     +-- Creates pipeline task chain with blockedBy dependencies
   |     +-- Executes data-driven main loop (TaskList → Execute → Complete)
   |     +-- Handles decision escalation from workers
@@ -35,26 +39,76 @@ Multi-Session Orchestrator Pipeline (Task-Based Enforcement)
   |     -> .task/plan-refined.json
   |
   +-- Phase 3: Plan Reviews (TASK-ENFORCED SEQUENTIAL)
-  |     +-- Task: "Plan Review - Sonnet" (blockedBy: plan)
-  |     +-- Task: "Plan Review - Opus" (blockedBy: sonnet)
-  |     +-- Task: "Plan Review - Codex" (blockedBy: opus) <- FINAL GATE
+  |     +-- TaskCreate + TaskUpdate(addBlockedBy) chains reviews
+  |     +-- Sonnet → Opus → Codex (each blocked by predecessor)
   |     -> .task/review-*.json
   |
   +-- Phase 4: Implementation
-  |     +-- Task: "Implementation" (blockedBy: codex-plan-review)
+  |     +-- TaskUpdate(addBlockedBy) blocks until Codex plan review completes
   |     +-- implementer agent (sonnet)
   |     +-- Resume for iterative fixes
   |     -> .task/impl-result.json
   |
   +-- Phase 5: Code Reviews (TASK-ENFORCED SEQUENTIAL)
-  |     +-- Task: "Code Review - Sonnet" (blockedBy: implementation)
-  |     +-- Task: "Code Review - Opus" (blockedBy: sonnet)
-  |     +-- Task: "Code Review - Codex" (blockedBy: opus) <- FINAL GATE
+  |     +-- TaskCreate + TaskUpdate(addBlockedBy) chains reviews
+  |     +-- Sonnet → Opus → Codex (each blocked by predecessor)
   |     -> .task/review-*.json
   |
   +-- Phase 6: Completion
-        +-- Report results
+  |     +-- Report results
+  |     +-- TeamDelete (read team_name from .task/pipeline-tasks.json)
+  ```
+
+---
+
+## Team-Based Requirements Gathering (v1.4.0)
+
+Requirements gathering uses Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) to explore from multiple perspectives in parallel, producing richer user stories from the start.
+
+### How It Works
+
 ```
+User provides initial description via /multi-ai
+         |
+         v
+    Lead (orchestrator/main session)
+    ├── Spawns 5 core specialists + additional as needed
+    ├── Specialists join the pipeline team as teammates
+    │    ├── Technical Analyst     (always) → explores codebase
+    │    ├── UX/Domain Analyst     (always) → user workflows, best practices
+    │    ├── Security Analyst      (always) → security analysis
+    │    ├── Performance Analyst   (always) → load, scalability, resources
+    │    ├── Architecture Analyst  (always) → design patterns, SOLID, maintainability
+    │    └── [Additional specialists as needed]
+    ├── Receives specialist messages (auto-delivered)
+    ├── Uses findings to AskUserQuestion (informed questions)
+    ├── Waits for specialists to complete analysis files
+    ├── Spawns requirements-gatherer in synthesis mode (one-shot Task)
+    │    └── Reads analysis files → writes user-story.json
+    └── Shuts down specialist teammates (pipeline team persists), continues pipeline
+```
+
+### Specialist Analysis Files
+
+| Specialist | Output File |
+|-----------|------------|
+| Technical Analyst | `.task/analysis-technical.json` |
+| UX/Domain Analyst | `.task/analysis-ux-domain.json` |
+| Security Analyst | `.task/analysis-security.json` |
+| Performance Analyst | `.task/analysis-performance.json` |
+| Architecture Analyst | `.task/analysis-architecture.json` |
+
+### Sub-Phases
+
+| Phase | Description |
+|-------|------------|
+| `requirements_team_pending` | Pipeline initialized, specialists not yet spawned. Spawn specialist teammates into pipeline team. |
+| `requirements_team_exploring` | Team active: specialists exploring, lead asking questions. Do NOT synthesize until ALL specialists complete. |
+| `requirements_gathering` | Fallback: no team, direct requirements-gatherer (when teams unavailable) |
+
+### Windows Compatibility
+
+In-process mode works on any terminal (Windows Terminal, VS Code, etc.). Use Shift+Up/Down to cycle between teammates. Split-pane mode requires tmux/iTerm2 (macOS/Linux only) but is not required.
 
 ---
 
@@ -73,31 +127,40 @@ The pipeline uses Claude Code's TaskCreate/TaskUpdate/TaskList tools to create *
 
 **Key Insight:** `blockedBy` is **data**, not an instruction. When the orchestrator calls `TaskList()`, blocked tasks cannot be claimed. The prompt becomes "find next unblocked task" - a data query, not instruction following.
 
+**Task API:** TaskCreate returns a task object with an `id` field. Dependencies are set via `TaskUpdate(id, addBlockedBy: [...])` — TaskCreate itself does NOT accept a blockedBy parameter.
+
+**Team Context Required:** TaskCreate/TaskUpdate/TaskList require a team context (via `TeamCreate`) to become available. The pipeline creates a persistent `pipeline-{BASENAME}-{HASH}` team at startup (Step 1.5) that provides these tools for the entire pipeline lifecycle. The team name is unique per project via path hash. Same-project concurrent runs are unsupported.
+
 ### Pipeline Task Chain
 
-At pipeline start, these tasks are created with dependencies:
+After creating the pipeline team (Step 1.5) and verifying task tools (Step 1.6), these tasks are created with dependencies:
 
 ```
-T1: Gather requirements          (blockedBy: [])
-T2: Create implementation plan   (blockedBy: [T1])
-T3: Plan Review - Sonnet         (blockedBy: [T2])
-T4: Plan Review - Opus           (blockedBy: [T3])
-T5: Plan Review - Codex          (blockedBy: [T4])   <- GATE
-T6: Implementation               (blockedBy: [T5])
-T7: Code Review - Sonnet         (blockedBy: [T6])
-T8: Code Review - Opus           (blockedBy: [T7])
-T9: Code Review - Codex          (blockedBy: [T8])   <- GATE
+T1 = TaskCreate(subject: "Gather requirements")
+T2 = TaskCreate(subject: "Create implementation plan")    → TaskUpdate(T2.id, addBlockedBy: [T1.id])
+T3 = TaskCreate(subject: "Plan Review - Sonnet")          → TaskUpdate(T3.id, addBlockedBy: [T2.id])
+T4 = TaskCreate(subject: "Plan Review - Opus")            → TaskUpdate(T4.id, addBlockedBy: [T3.id])
+T5 = TaskCreate(subject: "Plan Review - Codex")           → TaskUpdate(T5.id, addBlockedBy: [T4.id])   <- GATE
+T6 = TaskCreate(subject: "Implementation")                → TaskUpdate(T6.id, addBlockedBy: [T5.id])
+T7 = TaskCreate(subject: "Code Review - Sonnet")          → TaskUpdate(T7.id, addBlockedBy: [T6.id])
+T8 = TaskCreate(subject: "Code Review - Opus")            → TaskUpdate(T8.id, addBlockedBy: [T7.id])
+T9 = TaskCreate(subject: "Code Review - Codex")           → TaskUpdate(T9.id, addBlockedBy: [T8.id])   <- GATE
 ```
+
+Returned IDs are stored in `.task/pipeline-tasks.json`.
 
 ### Dynamic Fix Tasks
 
 When a review returns `needs_changes`, the orchestrator:
 
-1. Creates a fix task: `"Fix [Phase] Issues - Iteration N"`
-2. Creates a RE-REVIEW task for the SAME reviewer (blocked by fix task)
-3. Updates the NEXT reviewer's `blockedBy` to include the re-review task (not the fix task)
-4. Marks the current review as completed with `metadata: {result: "needs_changes"}`
-5. After max 3 re-reviews per reviewer, escalates to user
+1. `fix = TaskCreate(subject: "Fix [Phase] - [Reviewer] vN")`
+2. `TaskUpdate(fix.id, addBlockedBy: [current_review_id])`
+3. `rerev = TaskCreate(subject: "[Phase] Review - [Reviewer] vN+1")`
+4. `TaskUpdate(rerev.id, addBlockedBy: [fix.id])`
+5. `if next_reviewer_id is not null: TaskUpdate(next_reviewer_id, addBlockedBy: [rerev.id])`
+   - Skip for Codex (final reviewer, no next reviewer)
+6. `TaskUpdate(current_review_id, status: "completed")`
+7. After max 10 re-reviews per reviewer, escalates to user
 
 This maintains the sequential requirement and ensures the same reviewer validates fixes before proceeding.
 
@@ -110,13 +173,15 @@ This maintains the sequential requirement and ensures the same reviewer validate
 ```
 
 The pipeline will:
-1. **Create task chain** with dependencies
-2. **Gather requirements** (interactive) - Custom agent with Business Analyst + PM expertise
+1. **Reset, create pipeline team & task chain** with dependencies
+2. **Gather requirements** (team-based) - Specialist teammates explore in parallel, lead asks informed questions, then synthesize
 3. **Plan** (semi-interactive) - Custom agent with Architect expertise
 4. **Review plan** (task-enforced) - Sequential: Sonnet → Opus → Codex gate
 5. **Implement** - Iterates until reviews approve
 6. **Review code** (task-enforced) - Sequential: Sonnet → Opus → Codex gate
 7. **Complete** - Report results
+
+**No phase skipping:** Every pipeline run executes ALL phases in order. Pre-existing plans or context from plan mode are input to the specialists, not a substitute for the pipeline. Never skip team-based requirements gathering.
 
 ---
 
@@ -126,7 +191,7 @@ The pipeline uses specialized agents defined in `agents/` directory. Model selec
 
 | Agent | Recommended Model | Purpose |
 |-------|-------------------|---------|
-| **requirements-gatherer** | opus | Business Analyst + Product Manager hybrid |
+| **requirements-gatherer** | opus | Business Analyst + Product Manager hybrid (supports synthesis mode with specialist analyses) |
 | **planner** | opus | Architect + Fullstack Developer hybrid |
 | **plan-reviewer** | sonnet/opus | Architect + Security + QA hybrid |
 | **implementer** | sonnet | Fullstack + TDD + Quality hybrid |
@@ -175,17 +240,16 @@ Codex (independent AI) provides final approval:
 Pipeline enforcement uses two hooks:
 
 ### UserPromptSubmit Hook (Guidance)
-- **File:** `hooks/guidance-hook.js`
+- **File:** `hooks/guidance-hook.ts`
 - **Purpose:** Reads `.task/*.json` files to determine phase, injects advisory guidance
 - **No state tracking:** Phase is implicit from which artifact files exist
 
 ### SubagentStop Hook (Enforcement)
-- **File:** `hooks/review-validator.js`
+- **File:** `hooks/review-validator.ts`
 - **Purpose:** Validates reviewer outputs when agents finish
 - **Can block:** Returns `{"decision": "block", "reason": "..."}` if:
   - Review doesn't verify all acceptance criteria
   - Review approves with unimplemented ACs
-  - `needs_changes` without fix/re-review tasks created
 
 Max 10 re-reviews per reviewer before escalating to user.
 
@@ -222,6 +286,7 @@ Max 10 re-reviews per reviewer before escalating to user.
 ### Pipeline Tasks (`.task/pipeline-tasks.json`)
 ```json
 {
+  "team_name": "pipeline-vibe-pipe-a1b2c3",
   "requirements": "task-id-1",
   "plan": "task-id-2",
   "plan_review_sonnet": "task-id-3",
@@ -240,8 +305,8 @@ Max 10 re-reviews per reviewer before escalating to user.
 
 | Script | Purpose |
 |--------|---------|
-| `orchestrator.sh` | Initialize/reset pipeline, show status |
-| `json-tool.ts` | Cross-platform JSON operations |
+| `orchestrator.ts` | Initialize/reset pipeline, show status (`bun orchestrator.ts [cmd]`) |
+| `json-tool.ts` | Cross-platform JSON operations (`bun json-tool.ts [cmd]`) |
 
 ---
 
@@ -249,9 +314,10 @@ Max 10 re-reviews per reviewer before escalating to user.
 
 If stuck:
 
-1. **Check task state:** `TaskList()` to see blocked tasks
+1. **Check task state:** `TaskList()` to see blocked tasks (requires pipeline team to be active)
 2. **Check artifacts:** Read `.task/*.json` files to understand progress
-3. **Reset pipeline:** `"${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator.sh" reset`
+3. **Reset pipeline:** `bun "${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator.ts" reset`
+4. **If TaskList() doesn't work:** Check that the pipeline team exists — Step 1.5 may need to be re-run
 
 ---
 

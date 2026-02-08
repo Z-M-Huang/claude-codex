@@ -8,24 +8,30 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
 
 // INLINE MOCK - simulates task orchestration for testing
-let mockTasks = [];
+interface MockTask {
+  id: string;
+  subject: string;
+  blockedBy: string[];
+}
+
+let mockTasks: MockTask[] = [];
 let nextId = 1;
 
 const MockTaskTools = {
-  reset: () => { mockTasks = []; nextId = 1; },
-  TaskCreate: (opts) => {
-    const task = { id: String(nextId++), ...opts, blockedBy: [] };
+  reset: (): void => { mockTasks = []; nextId = 1; },
+  TaskCreate: (opts: { subject: string }): MockTask => {
+    const task: MockTask = { id: String(nextId++), ...opts, blockedBy: [] };
     mockTasks.push(task);
     return task;
   },
-  TaskUpdate: (id, updates) => {
+  TaskUpdate: (id: string, updates: { addBlockedBy?: string[] }): MockTask | undefined => {
     const task = mockTasks.find(t => t.id === id);
     if (task && updates.addBlockedBy) {
       task.blockedBy = [...task.blockedBy, ...updates.addBlockedBy];
     }
     return task;
   },
-  TaskList: () => mockTasks
+  TaskList: (): MockTask[] => mockTasks
 };
 
 describe('Re-review orchestration', () => {
@@ -49,7 +55,7 @@ describe('Re-review orchestration', () => {
     // Verify chain: fix -> re-review -> opus
     const tasks = TaskList();
     const opus = tasks.find(t => t.subject === 'Plan Review - Opus');
-    expect(opus.blockedBy).toContain(reReviewTask.id);
+    expect(opus!.blockedBy).toContain(reReviewTask.id);
   });
 
   test('When Opus returns needs_changes, blockedBy chain is correct', () => {
@@ -70,7 +76,7 @@ describe('Re-review orchestration', () => {
     // Verify chain
     const tasks = TaskList();
     const codex = tasks.find(t => t.subject === 'Plan Review - Codex');
-    expect(codex.blockedBy).toContain(reReviewTask.id);
+    expect(codex!.blockedBy).toContain(reReviewTask.id);
   });
 
   test('Code review follows same pattern', () => {
@@ -91,7 +97,7 @@ describe('Re-review orchestration', () => {
     // Verify
     const tasks = TaskList();
     const opus = tasks.find(t => t.subject === 'Code Review - Opus');
-    expect(opus.blockedBy).toContain(reReviewTask.id);
+    expect(opus!.blockedBy).toContain(reReviewTask.id);
   });
 
   test('Multiple re-reviews increment version number correctly', () => {
@@ -134,7 +140,7 @@ describe('Re-review orchestration', () => {
     const fix = tasks.find(t => t.subject === 'Fix Plan Issues - Iteration 1');
     const reReview = tasks.find(t => t.subject === 'Plan Review - Sonnet v2');
 
-    expect(fix.blockedBy).toContain(sonnetTask.id);
-    expect(reReview.blockedBy).toContain(fixTask.id);
+    expect(fix!.blockedBy).toContain(sonnetTask.id);
+    expect(reReview!.blockedBy).toContain(fixTask.id);
   });
 });

@@ -4,14 +4,19 @@ import * as path from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
 
-const SCRIPT_PATH = path.join(import.meta.dir, 'codex-review.js');
+const SCRIPT_PATH = path.join(import.meta.dir, 'codex-review.ts');
 
 /**
  * Run the codex-review script with given arguments
  */
-function runScript(args, cwd) {
+function runScript(args: string[], cwd: string): Promise<{
+  code: number | null;
+  events: Array<Record<string, unknown>>;
+  stdout: string;
+  stderr: string;
+}> {
   return new Promise((resolve) => {
-    const proc = spawn('node', [SCRIPT_PATH, ...args], {
+    const proc = spawn('bun', [SCRIPT_PATH, ...args], {
       cwd: cwd,
       stdio: ['pipe', 'pipe', 'pipe']
     });
@@ -19,8 +24,8 @@ function runScript(args, cwd) {
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', (data) => stdout += data);
-    proc.stderr.on('data', (data) => stderr += data);
+    proc.stdout!.on('data', (data: Buffer) => stdout += data);
+    proc.stderr!.on('data', (data: Buffer) => stderr += data);
 
     proc.on('close', (code) => {
       // Parse JSON lines from stdout
@@ -32,9 +37,9 @@ function runScript(args, cwd) {
   });
 }
 
-describe('codex-review.js', () => {
-  let tempDir;
-  let mockPluginRoot;
+describe('codex-review.ts', () => {
+  let tempDir: string;
+  let mockPluginRoot: string;
 
   beforeEach(() => {
     // Create temp project directory
@@ -58,8 +63,17 @@ describe('codex-review.js', () => {
     );
   });
 
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    // On Windows, spawned processes may hold file locks briefly after exit.
+    // Retry cleanup with a small delay to avoid EBUSY errors.
+    for (let i = 0; i < 3; i++) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        break;
+      } catch {
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
     fs.rmSync(mockPluginRoot, { recursive: true, force: true });
   });
 
@@ -84,7 +98,7 @@ describe('codex-review.js', () => {
     expect(result.code).toBe(1);
     expect(result.events.some(e =>
       e.phase === 'input_validation' &&
-      e.errors?.some(err => err.includes('Invalid'))
+      (e.errors as string[])?.some(err => err.includes('Invalid'))
     )).toBe(true);
   });
 
@@ -109,7 +123,7 @@ describe('codex-review.js', () => {
     expect(result.code).toBe(1);
     expect(result.events.some(e =>
       e.phase === 'input_validation' &&
-      e.errors?.some(err => err.includes('plan-refined.json'))
+      (e.errors as string[])?.some(err => err.includes('plan-refined.json'))
     )).toBe(true);
   });
 
@@ -122,7 +136,7 @@ describe('codex-review.js', () => {
     expect(result.code).toBe(1);
     expect(result.events.some(e =>
       e.phase === 'input_validation' &&
-      e.errors?.some(err => err.includes('impl-result.json'))
+      (e.errors as string[])?.some(err => err.includes('impl-result.json'))
     )).toBe(true);
   });
 
@@ -146,7 +160,7 @@ describe('codex-review.js', () => {
     expect(result.code).toBe(1);
     expect(result.events.some(e =>
       e.phase === 'input_validation' &&
-      e.errors?.some(err => err.includes('schema'))
+      (e.errors as string[])?.some(err => err.includes('schema'))
     )).toBe(true);
   });
 
@@ -168,7 +182,7 @@ describe('codex-review.js', () => {
     expect(result.code).toBe(1);
     expect(result.events.some(e =>
       e.phase === 'input_validation' &&
-      e.errors?.some(err => err.includes('standards'))
+      (e.errors as string[])?.some(err => err.includes('standards'))
     )).toBe(true);
   });
 
@@ -189,8 +203,8 @@ describe('codex-review.js', () => {
     // Check start event has correct session info
     const startEvent = result.events.find(e => e.event === 'start');
     expect(startEvent).toBeDefined();
-    expect(startEvent.isResume).toBe(false);
-    expect(startEvent.sessionActive).toBe(false);
+    expect(startEvent!.isResume).toBe(false);
+    expect(startEvent!.sessionActive).toBe(false);
   });
 
   test('detects subsequent review when session marker exists', async () => {
@@ -214,9 +228,9 @@ describe('codex-review.js', () => {
     // Check start event has correct session info
     const startEvent = result.events.find(e => e.event === 'start');
     expect(startEvent).toBeDefined();
-    expect(startEvent.isResume).toBe(true);
-    expect(startEvent.sessionActive).toBe(true);
-  });
+    expect(startEvent!.isResume).toBe(true);
+    expect(startEvent!.sessionActive).toBe(true);
+  }, 15000);
 
   test('--resume flag forces resume mode', async () => {
     // Create required files
@@ -234,8 +248,8 @@ describe('codex-review.js', () => {
     // Check start event has correct session info
     const startEvent = result.events.find(e => e.event === 'start');
     expect(startEvent).toBeDefined();
-    expect(startEvent.isResume).toBe(true);
-  });
+    expect(startEvent!.isResume).toBe(true);
+  }, 15000);
 
   // ================== CODEX CLI CHECK ==================
 
@@ -304,8 +318,8 @@ describe('codex-review.js', () => {
     );
 
     const startEvent = result.events.find(e => e.event === 'start');
-    expect(startEvent.isResume).toBe(false);
-    expect(startEvent.sessionActive).toBe(false);
+    expect(startEvent!.isResume).toBe(false);
+    expect(startEvent!.sessionActive).toBe(false);
   });
 
   // ================== SCOPED SESSION MARKERS ==================
@@ -330,8 +344,8 @@ describe('codex-review.js', () => {
 
     // Code review should NOT be in resume mode due to plan marker
     const startEvent = result.events.find(e => e.event === 'start');
-    expect(startEvent.isResume).toBe(false);
-    expect(startEvent.sessionActive).toBe(false);
+    expect(startEvent!.isResume).toBe(false);
+    expect(startEvent!.sessionActive).toBe(false);
   });
 
   test('code session marker triggers resume for code review', async () => {
@@ -354,9 +368,9 @@ describe('codex-review.js', () => {
 
     // Code review SHOULD be in resume mode
     const startEvent = result.events.find(e => e.event === 'start');
-    expect(startEvent.isResume).toBe(true);
-    expect(startEvent.sessionActive).toBe(true);
-  });
+    expect(startEvent!.isResume).toBe(true);
+    expect(startEvent!.sessionActive).toBe(true);
+  }, 15000);
 
   // ================== CHANGES SUMMARY ==================
 

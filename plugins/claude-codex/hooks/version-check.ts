@@ -2,39 +2,34 @@
  * Version Check Module - Pure helper functions for update notification
  *
  * This module exports testable pure functions for version checking.
- * Used by state-guidance-hook.js and imported by tests.
+ * Used by guidance-hook.ts and imported by tests.
  */
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { spawn } = require('child_process');
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { spawn } from 'child_process';
+import { readJson } from '../scripts/pipeline-utils.ts';
 
 // Constants
-const CACHE_FILE = path.join(os.tmpdir(), 'claude-codex-version-cache.json');
-const CACHE_TTL_MS = 3600000; // 1 hour
+export const CACHE_FILE = path.join(os.tmpdir(), 'claude-codex-version-cache.json');
+export const CACHE_TTL_MS = 3600000; // 1 hour
 
-/**
- * Safely read and parse JSON file
- */
-function readJson(filePath) {
-  try {
-    if (!fs.existsSync(filePath)) return null;
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    return null;
-  }
+interface VersionCache {
+  checked_at: number;
+  latest_version: string;
+  current_version: string;
 }
 
 /**
  * Get current plugin version from plugin.json
  */
-function getCurrentVersion() {
+export function getCurrentVersion(): string | null {
   try {
-    const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(__dirname);
+    const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(import.meta.dir);
     const pluginJson = path.join(pluginRoot, '.claude-plugin', 'plugin.json');
-    const data = readJson(pluginJson);
-    return data?.version || null;
+    const data = readJson(pluginJson) as Record<string, unknown> | null;
+    return (data?.version as string) || null;
   } catch {
     return null;
   }
@@ -44,9 +39,9 @@ function getCurrentVersion() {
  * Read version cache synchronously
  * Returns {latest_version, current_version} or null if expired/missing
  */
-function readVersionCache() {
+export function readVersionCache(): { latest_version: string; current_version: string } | null {
   try {
-    const cache = readJson(CACHE_FILE);
+    const cache = readJson(CACHE_FILE) as VersionCache | null;
     if (!cache || !cache.checked_at || !cache.latest_version) {
       return null;
     }
@@ -70,7 +65,7 @@ function readVersionCache() {
  * Returns true if latest > current
  * Handles 'v' prefix and treats pre-release versions (with '-') as not newer
  */
-function isNewerVersion(current, latest) {
+export function isNewerVersion(current: string | null, latest: string | null): boolean {
   try {
     // Return false if either version is missing
     if (!current || !latest) {
@@ -114,16 +109,16 @@ function isNewerVersion(current, latest) {
 /**
  * Format update notification message
  */
-function formatUpdateMessage(current, latest) {
+export function formatUpdateMessage(current: string, latest: string): string {
   return `Update available: v${current} -> v${latest}. Run \`/plugin uninstall claude-codex@claude-codex && /plugin install claude-codex@claude-codex --scope user\` to update.`;
 }
 
 /**
  * Spawn background worker to refresh version cache (fire-and-forget)
  */
-function spawnCacheRefresh(currentVersion) {
+export function spawnCacheRefresh(currentVersion: string): void {
   try {
-    const workerPath = path.join(__dirname, 'version-check-worker.js');
+    const workerPath = path.join(import.meta.dir, 'version-check-worker.ts');
     const child = spawn('bun', [workerPath, currentVersion], {
       detached: true,
       stdio: 'ignore'
@@ -138,7 +133,7 @@ function spawnCacheRefresh(currentVersion) {
  * Check for plugin updates (synchronous orchestration)
  * Returns formatted update message or null
  */
-function checkForUpdate() {
+export function checkForUpdate(): string | null {
   try {
     const currentVersion = getCurrentVersion();
     if (!currentVersion) {
@@ -162,16 +157,3 @@ function checkForUpdate() {
     return null;
   }
 }
-
-// Export all functions for testing
-module.exports = {
-  CACHE_FILE,
-  CACHE_TTL_MS,
-  readJson,
-  getCurrentVersion,
-  readVersionCache,
-  isNewerVersion,
-  formatUpdateMessage,
-  spawnCacheRefresh,
-  checkForUpdate
-};

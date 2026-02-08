@@ -1,5 +1,5 @@
 .task
-review/
 *.log
-pipeline.config.local.json
 .claude/settings.local.json
+nul
+node_modules

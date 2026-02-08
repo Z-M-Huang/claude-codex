@@ -1,5 +1,5 @@
 /**
- * Tests for version-check-worker.js
+ * Tests for version-check-worker.ts
  *
  * Tests cover:
  * - Worker writes cache on successful fetch
@@ -19,8 +19,17 @@ import os from 'os';
 const CACHE_FILE = path.join(os.tmpdir(), 'claude-codex-version-cache.json');
 const GITHUB_RELEASES_URL = 'https://api.github.com/repos/Z-M-Huang/claude-codex/releases/latest';
 
+interface MockResponse {
+  ok: boolean;
+  status?: number;
+  json: () => Promise<Record<string, unknown>>;
+}
+
 // Helper to simulate worker main logic
-async function simulateWorkerMain(currentVersion, mockFetch) {
+async function simulateWorkerMain(
+  currentVersion: string,
+  mockFetch: (url: string, options: RequestInit) => Promise<MockResponse>
+): Promise<{ success: boolean; reason?: string; latestVersion?: string; error?: Error; status?: number }> {
   try {
     if (!currentVersion) {
       return { success: false, reason: 'no_version' };
@@ -29,7 +38,7 @@ async function simulateWorkerMain(currentVersion, mockFetch) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    let response;
+    let response: MockResponse;
     try {
       response = await mockFetch(GITHUB_RELEASES_URL, {
         headers: { 'User-Agent': 'claude-codex-plugin' },
@@ -37,7 +46,7 @@ async function simulateWorkerMain(currentVersion, mockFetch) {
       });
     } catch (err) {
       clearTimeout(timeoutId);
-      return { success: false, reason: 'fetch_error', error: err };
+      return { success: false, reason: 'fetch_error', error: err as Error };
     }
 
     clearTimeout(timeoutId);
@@ -52,7 +61,7 @@ async function simulateWorkerMain(currentVersion, mockFetch) {
       return { success: false, reason: 'prerelease' };
     }
 
-    const tagName = data.tag_name || '';
+    const tagName = (data.tag_name as string) || '';
     const latestVersion = tagName.replace(/^v/, '');
 
     if (!latestVersion) {
@@ -68,7 +77,7 @@ async function simulateWorkerMain(currentVersion, mockFetch) {
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2), 'utf8');
     return { success: true, latestVersion };
   } catch (err) {
-    return { success: false, reason: 'exception', error: err };
+    return { success: false, reason: 'exception', error: err as Error };
   }
 }
 
@@ -92,7 +101,7 @@ describe('Version Check Worker Logic', () => {
   });
 
   test('Worker writes cache on successful fetch', async () => {
-    const mockFetch = async (url, options) => {
+    const mockFetch = async (_url: string, _options: RequestInit): Promise<MockResponse> => {
       return {
         ok: true,
         json: async () => ({
@@ -117,7 +126,7 @@ describe('Version Check Worker Logic', () => {
   });
 
   test('Worker filters out pre-release versions', async () => {
-    const mockFetch = async (url, options) => {
+    const mockFetch = async (_url: string, _options: RequestInit): Promise<MockResponse> => {
       return {
         ok: true,
         json: async () => ({
@@ -137,7 +146,7 @@ describe('Version Check Worker Logic', () => {
   });
 
   test('Worker silent fails on network error', async () => {
-    const mockFetch = async (url, options) => {
+    const mockFetch = async (_url: string, _options: RequestInit): Promise<MockResponse> => {
       throw new Error('Network error');
     };
 
@@ -151,10 +160,10 @@ describe('Version Check Worker Logic', () => {
   });
 
   test('Worker sends User-Agent header', async () => {
-    let capturedHeaders = null;
+    let capturedHeaders: Record<string, string> | null = null;
 
-    const mockFetch = async (url, options) => {
-      capturedHeaders = options.headers;
+    const mockFetch = async (_url: string, options: RequestInit): Promise<MockResponse> => {
+      capturedHeaders = options.headers as Record<string, string>;
       return {
         ok: true,
         json: async () => ({
@@ -168,11 +177,11 @@ describe('Version Check Worker Logic', () => {
 
     expect(result.success).toBe(true);
     expect(capturedHeaders).not.toBe(null);
-    expect(capturedHeaders['User-Agent']).toBe('claude-codex-plugin');
+    expect(capturedHeaders!['User-Agent']).toBe('claude-codex-plugin');
   });
 
   test('Worker exits on missing current version', async () => {
-    const mockFetch = async (url, options) => {
+    const mockFetch = async (_url: string, _options: RequestInit): Promise<MockResponse> => {
       return {
         ok: true,
         json: async () => ({
@@ -192,10 +201,11 @@ describe('Version Check Worker Logic', () => {
   });
 
   test('Worker exits on HTTP error', async () => {
-    const mockFetch = async (url, options) => {
+    const mockFetch = async (_url: string, _options: RequestInit): Promise<MockResponse> => {
       return {
         ok: false,
-        status: 404
+        status: 404,
+        json: async () => ({})
       };
     };
 
@@ -210,7 +220,7 @@ describe('Version Check Worker Logic', () => {
   });
 
   test('Worker exits on missing tag_name', async () => {
-    const mockFetch = async (url, options) => {
+    const mockFetch = async (_url: string, _options: RequestInit): Promise<MockResponse> => {
       return {
         ok: true,
         json: async () => ({
@@ -229,7 +239,7 @@ describe('Version Check Worker Logic', () => {
   });
 
   test('Worker strips v prefix from version', async () => {
-    const mockFetch = async (url, options) => {
+    const mockFetch = async (_url: string, _options: RequestInit): Promise<MockResponse> => {
       return {
         ok: true,
         json: async () => ({
@@ -249,10 +259,11 @@ describe('Version Check Worker Logic', () => {
   });
 
   test('Worker handles rate limit (403) silently', async () => {
-    const mockFetch = async (url, options) => {
+    const mockFetch = async (_url: string, _options: RequestInit): Promise<MockResponse> => {
       return {
         ok: false,
-        status: 403
+        status: 403,
+        json: async () => ({})
       };
     };
 
@@ -269,7 +280,6 @@ describe('Version Check Worker Logic', () => {
 
 describe('Version Check Worker Script Integration', () => {
   beforeEach(() => {
-    // Clean up cache file before each test
     try {
       fs.unlinkSync(CACHE_FILE);
     } catch {
@@ -278,7 +288,6 @@ describe('Version Check Worker Script Integration', () => {
   });
 
   afterEach(() => {
-    // Clean up cache file after test
     try {
       fs.unlinkSync(CACHE_FILE);
     } catch {
@@ -287,7 +296,7 @@ describe('Version Check Worker Script Integration', () => {
   });
 
   test('Worker script exists and has proper shebang', () => {
-    const workerPath = path.join(__dirname, 'version-check-worker.js');
+    const workerPath = path.join(import.meta.dir, 'version-check-worker.ts');
     expect(fs.existsSync(workerPath)).toBe(true);
 
     const content = fs.readFileSync(workerPath, 'utf8');
@@ -295,7 +304,7 @@ describe('Version Check Worker Script Integration', () => {
   });
 
   test('Worker script uses correct constants', () => {
-    const workerPath = path.join(__dirname, 'version-check-worker.js');
+    const workerPath = path.join(import.meta.dir, 'version-check-worker.ts');
     const content = fs.readFileSync(workerPath, 'utf8');
 
     expect(content).toContain('claude-codex-version-cache.json');

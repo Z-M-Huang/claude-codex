@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Codex Review Wrapper Script
  *
@@ -6,9 +6,9 @@
  * Handles platform detection, timeout, session management, validation, and structured output.
  *
  * Usage:
- *   node codex-review.js --type plan --plugin-root /path/to/plugin
- *   node codex-review.js --type code --plugin-root /path/to/plugin
- *   node codex-review.js --type plan --plugin-root /path/to/plugin --resume
+ *   bun codex-review.ts --type plan --plugin-root /path/to/plugin
+ *   bun codex-review.ts --type code --plugin-root /path/to/plugin
+ *   bun codex-review.ts --type plan --plugin-root /path/to/plugin --resume
  *
  * The script automatically checks for .task/.codex-session-active to determine
  * if this is a first review or subsequent review (resume).
@@ -20,10 +20,16 @@
  *   3 - Timeout
  */
 
-const { spawn, execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import { spawn, execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { readJson as _readJsonBase, fileExists, writeJson } from './pipeline-utils.ts';
+
+/** Typed wrapper — codex-review expects Record<string, unknown> | null */
+function readJson(filePath: string): Record<string, unknown> | null {
+  return _readJsonBase(filePath) as Record<string, unknown> | null;
+}
 
 // ================== CONFIGURATION ==================
 
@@ -32,7 +38,7 @@ const TASK_DIR = '.task';
 const STDERR_FILE = path.join(TASK_DIR, 'codex_stderr.log');
 
 // Output file depends on review type (plan vs code)
-function getOutputFile(reviewType) {
+function getOutputFile(reviewType: string): string {
   // Plan reviews: review-codex.json
   // Code reviews: code-review-codex.json (to match pipeline conventions)
   return reviewType === 'code'
@@ -41,15 +47,22 @@ function getOutputFile(reviewType) {
 }
 
 // Session markers are scoped by review type to prevent cross-contamination
-function getSessionMarker(reviewType) {
+function getSessionMarker(reviewType: string): string {
   return path.join(TASK_DIR, `.codex-session-${reviewType}`);
 }
 
 // ================== ARGUMENT PARSING ==================
 
-function parseArgs() {
+interface ParsedArgs {
+  type: string | null;
+  pluginRoot: string | null;
+  forceResume: boolean;
+  changesSummary: string | null;
+}
+
+function parseArgs(): ParsedArgs {
   const args = process.argv.slice(2);
-  const result = { type: null, pluginRoot: null, forceResume: false, changesSummary: null };
+  const result: ParsedArgs = { type: null, pluginRoot: null, forceResume: false, changesSummary: null };
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--type' && args[i + 1]) {
@@ -71,16 +84,16 @@ function parseArgs() {
 
 // ================== PLATFORM DETECTION ==================
 
-function getPlatform() {
+function getPlatform(): string {
   const platform = os.platform();
   if (platform === 'win32') return 'windows';
   if (platform === 'darwin') return 'macos';
   return 'linux';
 }
 
-function isCodexInstalled() {
+function isCodexInstalled(): boolean {
   try {
-    execSync('codex --version', { stdio: 'pipe' });
+    execSync('codex --version', { stdio: 'pipe', timeout: 5000 });
     return true;
   } catch {
     return false;
@@ -89,28 +102,7 @@ function isCodexInstalled() {
 
 // ================== FILE HELPERS ==================
 
-function fileExists(filePath) {
-  try {
-    return fs.existsSync(filePath);
-  } catch {
-    return false;
-  }
-}
-
-function readJson(filePath) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function writeJson(filePath, data) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-}
-
-function writeError(error, phase, reviewType) {
+function writeError(error: string, phase: string, reviewType: string | null): void {
   const outputFile = getOutputFile(reviewType || 'plan');
   writeJson(outputFile, {
     status: 'error',
@@ -122,33 +114,35 @@ function writeError(error, phase, reviewType) {
 
 // ================== SESSION MANAGEMENT ==================
 
-function hasActiveSession(reviewType) {
+function hasActiveSession(reviewType: string): boolean {
   return fileExists(getSessionMarker(reviewType));
 }
 
-function createSessionMarker(reviewType) {
+function createSessionMarker(reviewType: string): void {
   try {
     fs.writeFileSync(getSessionMarker(reviewType), new Date().toISOString());
-  } catch (err) {
-    console.error(`Warning: Could not create session marker: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Warning: Could not create session marker: ${message}`);
   }
 }
 
-function removeSessionMarker(reviewType) {
+function removeSessionMarker(reviewType: string): void {
   try {
     const marker = getSessionMarker(reviewType);
     if (fileExists(marker)) {
       fs.unlinkSync(marker);
     }
-  } catch (err) {
-    console.error(`Warning: Could not remove session marker: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Warning: Could not remove session marker: ${message}`);
   }
 }
 
 // ================== INPUT VALIDATION ==================
 
-function validateInputs(args) {
-  const errors = [];
+function validateInputs(args: ParsedArgs): string[] {
+  const errors: string[] = [];
 
   // Check review type
   if (!args.type || !['plan', 'code'].includes(args.type)) {
@@ -204,19 +198,24 @@ function validateInputs(args) {
 
 // ================== CODEX EXECUTION ==================
 
-function buildCodexCommand(args, isResume) {
+interface CmdConfig {
+  command: string;
+  args: string[];
+}
+
+function buildCodexCommand(args: ParsedArgs, isResume: boolean): CmdConfig {
   const schemaFile = args.type === 'plan'
     ? 'plan-review.schema.json'
     : 'review-result.schema.json';
-  const schemaPath = path.join(args.pluginRoot, 'docs', 'schemas', schemaFile);
-  const standardsPath = path.join(args.pluginRoot, 'docs', 'standards.md');
+  const schemaPath = path.join(args.pluginRoot!, 'docs', 'schemas', schemaFile);
+  const standardsPath = path.join(args.pluginRoot!, 'docs', 'standards.md');
 
   const inputFile = args.type === 'plan'
     ? '.task/plan-refined.json'
     : '.task/impl-result.json';
 
   // Build the review prompt
-  let reviewPrompt;
+  let reviewPrompt: string;
 
   if (isResume && args.changesSummary) {
     // Resume with changes summary - focused re-review
@@ -230,7 +229,7 @@ function buildCodexCommand(args, isResume) {
   }
 
   // Build command args - output file depends on review type
-  const outputFile = getOutputFile(args.type);
+  const outputFile = getOutputFile(args.type!);
   const cmdArgs = [
     'exec',
     '--full-auto',
@@ -256,7 +255,7 @@ function buildCodexCommand(args, isResume) {
 /**
  * Escape argument for Windows shell
  */
-function escapeWinArg(arg) {
+function escapeWinArg(arg: string): string {
   // If arg contains spaces or special chars, wrap in double quotes
   // Escape any existing double quotes
   if (/[\s"&|<>^]/.test(arg)) {
@@ -265,13 +264,20 @@ function escapeWinArg(arg) {
   return arg;
 }
 
-function runCodex(cmdConfig) {
+interface RunResult {
+  success: boolean;
+  error?: string;
+  code: number;
+  message?: string;
+}
+
+function runCodex(cmdConfig: CmdConfig): Promise<RunResult> {
   return new Promise((resolve) => {
     const stderrStream = fs.createWriteStream(STDERR_FILE);
     let timedOut = false;
 
     const isWindows = os.platform() === 'win32';
-    let proc;
+    let proc: ReturnType<typeof spawn>;
 
     if (isWindows) {
       // On Windows, npm global commands are .cmd files that require shell
@@ -290,7 +296,7 @@ function runCodex(cmdConfig) {
       });
     }
 
-    proc.stderr.pipe(stderrStream);
+    proc.stderr!.pipe(stderrStream);
 
     // Set timeout
     const timeoutId = setTimeout(() => {
@@ -318,13 +324,13 @@ function runCodex(cmdConfig) {
           } else if (stderr.includes('session') || stderr.includes('expired')) {
             errorType = 'session_expired';
           }
-        } catch {}
+        } catch { /* ignore */ }
 
-        resolve({ success: false, error: errorType, code: code });
+        resolve({ success: false, error: errorType, code: code ?? 1 });
       }
     });
 
-    proc.on('error', (err) => {
+    proc.on('error', (err: NodeJS.ErrnoException) => {
       clearTimeout(timeoutId);
       stderrStream.end();
 
@@ -339,7 +345,7 @@ function runCodex(cmdConfig) {
 
 // ================== OUTPUT VALIDATION ==================
 
-function validateOutput(reviewType) {
+function validateOutput(reviewType: string): { valid: boolean; error?: string; output?: Record<string, unknown> } {
   const outputFile = getOutputFile(reviewType);
   if (!fileExists(outputFile)) {
     return { valid: false, error: 'Output file not created' };
@@ -357,7 +363,7 @@ function validateOutput(reviewType) {
   // Valid statuses (per updated schemas - both support all four)
   const validStatuses = ['approved', 'needs_changes', 'needs_clarification', 'rejected'];
 
-  if (!validStatuses.includes(output.status)) {
+  if (!validStatuses.includes(output.status as string)) {
     return { valid: false, error: `Invalid status "${output.status}". Must be one of: ${validStatuses.join(', ')}` };
   }
 
@@ -372,9 +378,9 @@ function validateOutput(reviewType) {
 // ================== MAIN ==================
 
 // Captured for error handling in catch block
-let currentReviewType = null;
+let currentReviewType: string | null = null;
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs();
   currentReviewType = args.type; // Capture early for catch block
   const platform = getPlatform();
@@ -426,7 +432,7 @@ async function main() {
     }));
 
     // Remove stale session marker (scoped by type)
-    removeSessionMarker(args.type);
+    removeSessionMarker(args.type!);
 
     // Retry without resume
     const freshCmdConfig = buildCodexCommand(args, false);
@@ -434,7 +440,7 @@ async function main() {
   }
 
   if (!result.success) {
-    let errorMsg;
+    let errorMsg: string;
     let exitCode = 2;
 
     switch (result.error) {
@@ -450,7 +456,7 @@ async function main() {
         break;
       case 'session_expired':
         errorMsg = 'Codex session expired and retry failed';
-        removeSessionMarker(args.type);
+        removeSessionMarker(args.type!);
         break;
       default:
         errorMsg = `Codex execution failed with exit code ${result.code}`;
@@ -468,9 +474,9 @@ async function main() {
   }
 
   // Validate output (pass review type for correct status validation)
-  const validation = validateOutput(args.type);
+  const validation = validateOutput(args.type!);
   if (!validation.valid) {
-    writeError(validation.error, 'output_validation', args.type);
+    writeError(validation.error!, 'output_validation', args.type);
     console.log(JSON.stringify({
       event: 'error',
       phase: 'output_validation',
@@ -481,21 +487,21 @@ async function main() {
   }
 
   // Success - create session marker for future resume (scoped by type)
-  createSessionMarker(args.type);
+  createSessionMarker(args.type!);
 
   console.log(JSON.stringify({
     event: 'complete',
-    status: validation.output.status,
-    summary: validation.output.summary,
-    needs_clarification: validation.output.needs_clarification || false,
-    output_file: getOutputFile(args.type),
+    status: validation.output!.status,
+    summary: validation.output!.summary,
+    needs_clarification: validation.output!.needs_clarification || false,
+    output_file: getOutputFile(args.type!),
     session_marker_created: true
   }));
 
   process.exit(0);
 }
 
-main().catch((err) => {
+main().catch((err: Error) => {
   writeError(err.message, 'unexpected_error', currentReviewType);
   console.log(JSON.stringify({
     event: 'error',

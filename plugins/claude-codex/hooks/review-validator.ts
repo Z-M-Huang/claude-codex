@@ -22,27 +22,43 @@
  * and happens AFTER the review, not during SubagentStop.
  */
 
-import { readFileSync, existsSync, statSync } from 'fs';
-import { join } from 'path';
+import fs from 'fs';
+import path from 'path';
+import { readJson, computeTaskDir } from '../scripts/pipeline-utils.ts';
 
-const TASK_DIR = join(process.env.CLAUDE_PROJECT_DIR || process.cwd(), '.task');
+const TASK_DIR = computeTaskDir();
 
 // Actual file names used by the pipeline (per SKILL.md Agent Reference)
 const PLAN_REVIEW_FILES = ['review-sonnet.json', 'review-opus.json', 'review-codex.json'];
 const CODE_REVIEW_FILES = ['code-review-sonnet.json', 'code-review-opus.json', 'code-review-codex.json'];
 
-function readJson(filePath) {
-  try {
-    if (!existsSync(filePath)) return null;
-    return JSON.parse(readFileSync(filePath, 'utf-8'));
-  } catch {
-    return null;
-  }
+interface ReviewBlockResult {
+  decision: 'block';
+  reason: string;
 }
 
-function getAgentTypeFromTranscript(transcriptPath) {
+interface UserStory {
+  acceptance_criteria?: Array<{ id: string }>;
+}
+
+interface PlanReview {
+  status?: string;
+  requirements_coverage?: {
+    mapping?: Array<{ ac_id: string; steps?: string[] }>;
+    missing?: string[];
+  };
+}
+
+interface CodeReview {
+  status?: string;
+  acceptance_criteria_verification?: {
+    details?: Array<{ ac_id: string; status: string; evidence?: string; notes?: string }>;
+  };
+}
+
+function getAgentTypeFromTranscript(transcriptPath: string): string | null {
   try {
-    const content = readFileSync(transcriptPath, 'utf-8');
+    const content = fs.readFileSync(transcriptPath, 'utf-8');
     const match = content.match(/subagent_type['":\s]+['"]?(claude-codex:[^'"}\s,]+)/);
     return match ? match[1] : null;
   } catch {
@@ -55,16 +71,16 @@ function getAgentTypeFromTranscript(transcriptPath) {
  * SubagentStop fires immediately after agent finishes, so the most recent file
  * is the one just written by the agent.
  */
-function findMostRecentFile(files) {
-  let mostRecent = null;
+function findMostRecentFile(files: string[]): { path: string; filename: string } | null {
+  let mostRecent: { path: string; filename: string } | null = null;
   let mostRecentTime = 0;
 
   for (const filename of files) {
-    const filepath = join(TASK_DIR, filename);
-    if (!existsSync(filepath)) continue;
+    const filepath = path.join(TASK_DIR, filename);
+    if (!fs.existsSync(filepath)) continue;
 
     try {
-      const stat = statSync(filepath);
+      const stat = fs.statSync(filepath);
       const mtime = stat.mtimeMs;
 
       if (mtime > mostRecentTime) {
@@ -79,7 +95,7 @@ function findMostRecentFile(files) {
   return mostRecent;
 }
 
-export function validatePlanReview(review, userStory) {
+export function validatePlanReview(review: PlanReview, userStory: UserStory | null): ReviewBlockResult | null {
   const acIds = (userStory?.acceptance_criteria || []).map(ac => ac.id);
   if (acIds.length === 0) return null; // Skip validation if no ACs
 
@@ -102,17 +118,17 @@ export function validatePlanReview(review, userStory) {
     };
   }
 
-  if (review.status === 'approved' && (coverage.missing?.length > 0)) {
+  if (review.status === 'approved' && (coverage.missing?.length ?? 0) > 0) {
     return {
       decision: 'block',
-      reason: `Cannot approve with missing requirements: ${coverage.missing.join(', ')}. Status must be needs_changes.`
+      reason: `Cannot approve with missing requirements: ${coverage.missing!.join(', ')}. Status must be needs_changes.`
     };
   }
 
   return null; // Valid
 }
 
-export function validateCodeReview(review, userStory) {
+export function validateCodeReview(review: CodeReview, userStory: UserStory | null): ReviewBlockResult | null {
   const acIds = (userStory?.acceptance_criteria || []).map(ac => ac.id);
   if (acIds.length === 0) return null; // Skip validation if no ACs
 
@@ -149,18 +165,18 @@ export function validateCodeReview(review, userStory) {
   return null; // Valid
 }
 
-async function main() {
+async function main(): Promise<void> {
   // Read input from stdin (per official docs)
-  let input;
+  let input: { agent_transcript_path?: string };
   try {
-    const stdin = readFileSync(0, 'utf-8');
+    const stdin = fs.readFileSync(0, 'utf-8');
     input = JSON.parse(stdin);
   } catch {
     process.exit(0); // No valid input, allow
   }
 
-  const transcriptPath = input.agent_transcript_path;
-  if (!transcriptPath || !existsSync(transcriptPath)) {
+  const transcriptPath = input!.agent_transcript_path;
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) {
     process.exit(0); // No transcript, allow
   }
 
@@ -177,8 +193,8 @@ async function main() {
   }
 
   // Determine which files to check based on agent type
-  let reviewFiles;
-  let isPlanReview;
+  let reviewFiles: string[];
+  let isPlanReview: boolean;
 
   if (isPlanReviewer) {
     // plan-reviewer handles sonnet/opus plan reviews
@@ -191,7 +207,7 @@ async function main() {
   } else {
     // codex-reviewer handles both plan and code final reviews
     // Check which phase we're in by looking at what files exist
-    const hasImplResult = existsSync(join(TASK_DIR, 'impl-result.json'));
+    const hasImplResult = fs.existsSync(path.join(TASK_DIR, 'impl-result.json'));
     if (hasImplResult) {
       reviewFiles = ['code-review-codex.json'];
       isPlanReview = false;
@@ -207,17 +223,17 @@ async function main() {
     process.exit(0); // No review file found, allow
   }
 
-  const review = readJson(recentFile.path);
+  const review = readJson(recentFile.path) as PlanReview | CodeReview | null;
   if (!review) {
     process.exit(0); // Can't read review, allow
   }
 
-  const userStory = readJson(join(TASK_DIR, 'user-story.json'));
+  const userStory = readJson(path.join(TASK_DIR, 'user-story.json')) as UserStory | null;
 
   // Validate AC coverage
   const error = isPlanReview
-    ? validatePlanReview(review, userStory)
-    : validateCodeReview(review, userStory);
+    ? validatePlanReview(review as PlanReview, userStory)
+    : validateCodeReview(review as CodeReview, userStory);
 
   if (error) {
     console.log(JSON.stringify(error));

@@ -57,10 +57,10 @@ Read(".task/plan-refined.json")
 
 ## Step 3: Run the Wrapper Script
 
-Execute the codex-review.js script with the determined parameters:
+Execute the codex-review.ts script with the determined parameters:
 
 ```bash
-node "{PLUGIN_ROOT}/scripts/codex-review.js" --type {REVIEW_TYPE} --plugin-root "{PLUGIN_ROOT}"
+bun "{PLUGIN_ROOT}/scripts/codex-review.ts" --type {REVIEW_TYPE} --plugin-root "{PLUGIN_ROOT}"
 ```
 
 **Platform notes:**
@@ -71,12 +71,12 @@ node "{PLUGIN_ROOT}/scripts/codex-review.js" --type {REVIEW_TYPE} --plugin-root 
 
 Linux/macOS:
 ```bash
-node "/home/user/.claude/plugins/claude-codex/scripts/codex-review.js" --type plan --plugin-root "/home/user/.claude/plugins/claude-codex"
+bun "/home/user/.claude/plugins/claude-codex/scripts/codex-review.ts" --type plan --plugin-root "/home/user/.claude/plugins/claude-codex"
 ```
 
 Windows:
 ```bash
-node "C:/Users/user/.claude/plugins/claude-codex/scripts/codex-review.js" --type code --plugin-root "C:/Users/user/.claude/plugins/claude-codex"
+bun "C:/Users/user/.claude/plugins/claude-codex/scripts/codex-review.ts" --type code --plugin-root "C:/Users/user/.claude/plugins/claude-codex"
 ```
 
 ---
@@ -221,13 +221,13 @@ Session expired - script will automatically retry with fresh review
 
 ```bash
 # Plan review (auto-detects first vs resume)
-node "{PLUGIN_ROOT}/scripts/codex-review.js" --type plan --plugin-root "{PLUGIN_ROOT}"
+bun "{PLUGIN_ROOT}/scripts/codex-review.ts" --type plan --plugin-root "{PLUGIN_ROOT}"
 
 # Code review (auto-detects first vs resume)
-node "{PLUGIN_ROOT}/scripts/codex-review.js" --type code --plugin-root "{PLUGIN_ROOT}"
+bun "{PLUGIN_ROOT}/scripts/codex-review.ts" --type code --plugin-root "{PLUGIN_ROOT}"
 
 # Resume with changes summary (for re-reviews after fixes)
-node "{PLUGIN_ROOT}/scripts/codex-review.js" --type code --plugin-root "{PLUGIN_ROOT}" --changes-summary "Fixed SQL injection in login.js, added input validation"
+bun "{PLUGIN_ROOT}/scripts/codex-review.ts" --type code --plugin-root "{PLUGIN_ROOT}" --changes-summary "Fixed SQL injection in login.js, added input validation"
 
 # Force fresh review (ignore session marker)
 # (Remove .task/.codex-session-plan or .task/.codex-session-code before running)

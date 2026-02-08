@@ -22,12 +22,14 @@
  *   -field           - Delete field
  */
 
+import fs from 'fs';
+
 const args = process.argv.slice(2);
 const command = args[0];
 
 function readJsonFile(path: string): unknown {
   try {
-    const content = require("fs").readFileSync(path, "utf-8");
+    const content = fs.readFileSync(path, "utf-8");
     return JSON.parse(content);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
@@ -41,7 +43,7 @@ function readJsonFile(path: string): unknown {
 
 function writeJsonFile(path: string, data: unknown): void {
   const content = JSON.stringify(data, null, 2);
-  require("fs").writeFileSync(path, content + "\n");
+  fs.writeFileSync(path, content + "\n");
 }
 
 function getPath(obj: unknown, path: string): unknown {
@@ -259,7 +261,7 @@ switch (command) {
     }
 
     try {
-      const content = require("fs").readFileSync(file, "utf-8");
+      const content = fs.readFileSync(file, "utf-8");
       JSON.parse(content);
       process.exit(0);
     } catch {

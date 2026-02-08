@@ -106,16 +106,16 @@ Multi-AI orchestration pipeline with **hook-based enforcement** using Task + Res
 
 This command orchestrates specialized agents:
 
-1. **Requirements** (interactive) - `requirements-gatherer` agent gathers requirements + TDD criteria
+1. **Requirements** (team-based) - Specialist teammates explore in parallel, lead asks informed questions, `requirements-gatherer` synthesizes
 2. **Planning** (semi-interactive) - `planner` agent creates plan, asks user only if needed
 3. **Plan Reviews** (autonomous) - `plan-reviewer` agents (sonnet, opus) + Codex gate
-4. **Implementation** (Ralph Loop) - `implementer` agent iterates until tests pass + reviews approve
+4. **Implementation** (autonomous) - `implementer` agent iterates until tests pass + reviews approve
 5. **Code Reviews** (autonomous) - `code-reviewer` agents (sonnet, opus) + Codex gate
 6. **Complete** - Reports results
 
 ### Task-Based Pipeline Enforcement
 
-The pipeline uses **task dependencies** and **hook validation** (v1.3.1):
+The pipeline uses **task dependencies**, **hook validation**, and **agent teams** (v1.4.0):
 
 ```
 ┌────────────────────────────────────────────────────┐

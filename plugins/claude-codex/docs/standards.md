@@ -19,34 +19,38 @@
 
 This checklist defines all review categories. Each reviewer checks categories at different depths based on their role (see Reviewer Focus Areas below). Severity levels determine whether issues block approval.
 
-### Security - OWASP Top 10 (severity: error)
+### Security - OWASP Top 10 2021 (severity: error)
 
 **Critical security items - checked by all reviewers at appropriate depth:**
 
-1. **Injection** (SQL, NoSQL, Command, LDAP)
-   - Parameterized queries, no string concatenation
-   - Command execution with proper escaping
-2. **Broken Authentication**
-   - Secure session management
-   - Strong password policies
-3. **Sensitive Data Exposure**
-   - No secrets/credentials in code
-   - Encryption for sensitive data at rest and in transit
-4. **XML External Entities (XXE)**
-   - Disable DTD processing where possible
-5. **Broken Access Control**
+1. **A01:2021 - Broken Access Control**
    - Authorization checks on all protected resources
    - No IDOR vulnerabilities
-6. **Security Misconfiguration**
-   - Secure defaults, no debug in production
-7. **Cross-Site Scripting (XSS)**
+2. **A02:2021 - Cryptographic Failures**
+   - No secrets/credentials in code
+   - Encryption for sensitive data at rest and in transit
+3. **A03:2021 - Injection** (SQL, NoSQL, Command, LDAP, XSS)
+   - Parameterized queries, no string concatenation
+   - Command execution with proper escaping
    - Output encoding, Content Security Policy
-8. **Insecure Deserialization**
-   - Validate and sanitize serialized data
-9. **Using Components with Known Vulnerabilities**
+4. **A04:2021 - Insecure Design**
+   - Security built-in, not bolted on
+   - Threat modeling for new features
+5. **A05:2021 - Security Misconfiguration**
+   - Secure defaults, no debug in production
+   - Disable unnecessary features/DTD processing
+6. **A06:2021 - Vulnerable and Outdated Components**
    - Check dependencies for CVEs
-10. **Insufficient Logging & Monitoring**
-    - Security events logged (without sensitive data)
+7. **A07:2021 - Identification and Authentication Failures**
+   - Secure session management
+   - Strong password policies
+8. **A08:2021 - Software and Data Integrity Failures**
+   - Validate and sanitize serialized data
+   - Verify CI/CD pipeline integrity
+9. **A09:2021 - Security Logging and Monitoring Failures**
+   - Security events logged (without sensitive data)
+10. **A10:2021 - Server-Side Request Forgery (SSRF)**
+    - Validate and sanitize URLs for server-side requests
 
 ### Error Handling (severity: error/warning)
 

@@ -5,23 +5,28 @@
  * This script runs in the background (fire-and-forget) to update the version cache.
  * It fetches the latest release from GitHub API and writes to the cache file.
  *
- * Usage: bun version-check-worker.js <current_version>
+ * Usage: bun version-check-worker.ts <current_version>
  *
  * Exit behavior: Silent on all errors (no stdout/stderr output)
  */
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 const CACHE_FILE = path.join(os.tmpdir(), 'claude-codex-version-cache.json');
 const GITHUB_RELEASES_URL = 'https://api.github.com/repos/Z-M-Huang/claude-codex/releases/latest';
 const FETCH_TIMEOUT_MS = 10000; // 10 seconds
 
+interface GitHubRelease {
+  tag_name?: string;
+  prerelease?: boolean;
+}
+
 /**
  * Main worker logic
  */
-async function main() {
+async function main(): Promise<void> {
   try {
     // Get current version from command line argument
     const currentVersion = process.argv[2];
@@ -48,7 +53,7 @@ async function main() {
       process.exit(0);
     }
 
-    const data = await response.json();
+    const data = await response.json() as GitHubRelease;
 
     // Filter out pre-release versions
     if (data.prerelease) {
