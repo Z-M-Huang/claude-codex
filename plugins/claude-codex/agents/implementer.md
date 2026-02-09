@@ -184,7 +184,7 @@ When tests or reviews fail:
 4. Re-run tests to verify fix
 5. Proceed to next review cycle
 
-The hook manages iteration tracking via `.task/state.json`. Max 10 iterations per reviewer before escalating to user.
+The hook manages iteration tracking. Max 10 iterations per reviewer before escalating to user.
 
 ## Anti-Patterns to Avoid
 

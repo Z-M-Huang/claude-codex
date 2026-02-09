@@ -3,7 +3,7 @@
  * Simplified Guidance Hook - Advisory Mode Orchestration
  *
  * This UserPromptSubmit hook provides guidance based on .task/*.json files.
- * No state.json tracking - state is implicit from which files exist.
+ * State is implicit from which files exist.
  * Enforcement is handled by SubagentStop hook (review-validator.ts).
  *
  * Provides:

@@ -101,7 +101,6 @@ When a review returns `needs_changes`:
 | `.task/code-review-sonnet.json` | Sonnet code review |
 | `.task/code-review-opus.json` | Opus code review |
 | `.task/code-review-codex.json` | Codex code review |
-| `.task/state.json` | Pipeline state |
 | `.task/pipeline-tasks.json` | Team name + Task ID mapping |
 
 ---

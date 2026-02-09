@@ -224,6 +224,21 @@ describe('lock behavior', () => {
     expect(result.exitCode).toBe(0);
   });
 
+  test('reset removes artifacts and does not create state.json', () => {
+    // Setup artifacts
+    writeFileSync(join(TEST_TASK_DIR, 'some-artifact.json'), '{}');
+
+    const result = Bun.spawnSync(['bun', join(import.meta.dir, 'orchestrator.ts'), 'reset'], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: TEST_PROJECT_DIR },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(TEST_TASK_DIR, 'some-artifact.json'))).toBe(false);
+    expect(existsSync(join(TEST_TASK_DIR, 'state.json'))).toBe(false);
+  });
+
   test('wx flag prevents race condition on concurrent create', () => {
     // Manually test the wx flag behavior
     const testLock = join(TEST_TASK_DIR, '.test-lock');

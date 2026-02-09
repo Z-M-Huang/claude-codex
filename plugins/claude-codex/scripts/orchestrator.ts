@@ -329,12 +329,6 @@ function resetPipeline(): void {
   fs.rmSync(TASK_DIR, { recursive: true, force: true });
   fs.mkdirSync(TASK_DIR, { recursive: true });
 
-  // Initialize with template state
-  const templatePath = path.join(PLUGIN_ROOT, '.task.template', 'state.json');
-  if (fs.existsSync(templatePath)) {
-    fs.copyFileSync(templatePath, path.join(TASK_DIR, 'state.json'));
-  }
-
   logSuccess('Pipeline reset complete');
 }
 
