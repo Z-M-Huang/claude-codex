@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Expert code reviewer combining security auditing, performance analysis, and quality engineering for thorough code validation
 tools: Read, Write, Glob, Grep, Bash, LSP
-disallowedTools: Write, Edit
+disallowedTools: Edit
 ---
 
 # Code Reviewer Agent

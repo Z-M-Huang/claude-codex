@@ -17,7 +17,7 @@
 Multi-Session Orchestrator Pipeline (Task-Based Enforcement)
   |
   +-- Orchestrator (Main Session)
-  |     +-- Step 0: Create Pipeline Team (TeamCreate)
+  |     +-- Step 1.5: Create Pipeline Team (TeamCreate)
   |     |     +-- Idempotent: TeamDelete + TeamCreate("pipeline-{BASENAME}-{HASH}")
   |     |     +-- Verify: TaskList() probe
   |     |     +-- Fails fast if task tools unavailable
@@ -61,7 +61,7 @@ Multi-Session Orchestrator Pipeline (Task-Based Enforcement)
 
 ---
 
-## Team-Based Requirements Gathering (v1.4.1)
+## Team-Based Requirements Gathering (v1.4.2)
 
 Requirements gathering uses Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) to explore from multiple perspectives in parallel, producing richer user stories from the start.
 
@@ -133,29 +133,31 @@ The pipeline uses Claude Code's TaskCreate/TaskUpdate/TaskList tools to create *
 
 ### Pipeline Task Chain
 
-After creating the pipeline team (Step 1.5) and verifying task tools (Step 1.6), these tasks are created with dependencies:
+After creating the pipeline team (Step 1.5) and verifying task tools (Step 1.6), these tasks are created with dependencies. Every `TaskCreate` includes a rich `description` with AGENT, MODEL, INPUT, OUTPUT, and key instructions. The main loop calls `TaskGet()` to read the full description before spawning each agent — execution context is always data-driven, never derived from hardcoded prose.
 
 ```
-T1 = TaskCreate(subject: "Gather requirements")
-T2 = TaskCreate(subject: "Create implementation plan")    → TaskUpdate(T2.id, addBlockedBy: [T1.id])
-T3 = TaskCreate(subject: "Plan Review - Sonnet")          → TaskUpdate(T3.id, addBlockedBy: [T2.id])
-T4 = TaskCreate(subject: "Plan Review - Opus")            → TaskUpdate(T4.id, addBlockedBy: [T3.id])
-T5 = TaskCreate(subject: "Plan Review - Codex")           → TaskUpdate(T5.id, addBlockedBy: [T4.id])   <- GATE
-T6 = TaskCreate(subject: "Implementation")                → TaskUpdate(T6.id, addBlockedBy: [T5.id])
-T7 = TaskCreate(subject: "Code Review - Sonnet")          → TaskUpdate(T7.id, addBlockedBy: [T6.id])
-T8 = TaskCreate(subject: "Code Review - Opus")            → TaskUpdate(T8.id, addBlockedBy: [T7.id])
-T9 = TaskCreate(subject: "Code Review - Codex")           → TaskUpdate(T9.id, addBlockedBy: [T8.id])   <- GATE
+T1 = TaskCreate(subject: "Gather requirements", description: "AGENT: ... INPUT: ... OUTPUT: ...")
+T2 = TaskCreate(subject: "Create implementation plan", description: "...")  → TaskUpdate(T2.id, addBlockedBy: [T1.id])
+T3 = TaskCreate(subject: "Plan Review - Sonnet", description: "...")        → TaskUpdate(T3.id, addBlockedBy: [T2.id])
+T4 = TaskCreate(subject: "Plan Review - Opus", description: "...")          → TaskUpdate(T4.id, addBlockedBy: [T3.id])
+T5 = TaskCreate(subject: "Plan Review - Codex", description: "...")         → TaskUpdate(T5.id, addBlockedBy: [T4.id])   <- GATE
+T6 = TaskCreate(subject: "Implementation", description: "...")              → TaskUpdate(T6.id, addBlockedBy: [T5.id])
+T7 = TaskCreate(subject: "Code Review - Sonnet", description: "...")        → TaskUpdate(T7.id, addBlockedBy: [T6.id])
+T8 = TaskCreate(subject: "Code Review - Opus", description: "...")          → TaskUpdate(T8.id, addBlockedBy: [T7.id])
+T9 = TaskCreate(subject: "Code Review - Codex", description: "...")         → TaskUpdate(T9.id, addBlockedBy: [T8.id])   <- GATE
 ```
 
 Returned IDs are stored in `.task/pipeline-tasks.json`.
 
+**Progressive enrichment:** Before marking each task completed, the orchestrator reads its output file, extracts key context (≤ 500 chars), and appends a `CONTEXT FROM PRIOR TASK` block to the next task's description via `TaskUpdate`. This gives each agent relevant context from the previous phase without re-reading full artifacts. Enrichment is best-effort — failure does not block the pipeline.
+
 ### Dynamic Fix Tasks
 
-When a review returns `needs_changes`, the orchestrator:
+When a review returns `needs_changes`, the orchestrator creates fix + re-review tasks with the same rich `description` contract (AGENT/MODEL/INPUT/OUTPUT/ISSUES):
 
-1. `fix = TaskCreate(subject: "Fix [Phase] - [Reviewer] vN")`
+1. `fix = TaskCreate(subject: "Fix [Phase] - [Reviewer] vN", description: "AGENT: ... ISSUES TO FIX: ...")`
 2. `TaskUpdate(fix.id, addBlockedBy: [current_review_id])`
-3. `rerev = TaskCreate(subject: "[Phase] Review - [Reviewer] vN+1")`
+3. `rerev = TaskCreate(subject: "[Phase] Review - [Reviewer] vN+1", description: "AGENT: ... NOTE: Re-review after fix...")`
 4. `TaskUpdate(rerev.id, addBlockedBy: [fix.id])`
 5. `if next_reviewer_id is not null: TaskUpdate(next_reviewer_id, addBlockedBy: [rerev.id])`
    - Skip for Codex (final reviewer, no next reviewer)

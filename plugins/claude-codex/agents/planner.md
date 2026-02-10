@@ -1,8 +1,8 @@
 ---
 name: planner
 description: Senior software architect combining deep codebase research with architectural pattern expertise for comprehensive implementation planning
-tools: Read, Write, Glob, Grep, LSP
-disallowedTools: Write, Edit, Bash
+tools: Read, Write, Edit, Glob, Grep, LSP
+disallowedTools: Bash
 ---
 
 # Planner Agent

@@ -26,6 +26,138 @@ import fs from 'fs';
 import path from 'path';
 import { readJson, computeTaskDir } from '../scripts/pipeline-utils.ts';
 
+// ================== Codex Execution Proof Helpers ==================
+
+/**
+ * Tokenize a shell command, respecting single/double quotes.
+ * Returns null on unbalanced quotes (conservative reject).
+ */
+function shellTokenize(cmd: string): string[] | null {
+  const tokens: string[] = [];
+  let i = 0;
+  const len = cmd.length;
+  while (i < len) {
+    while (i < len && /\s/.test(cmd[i])) i++;
+    if (i >= len) break;
+    let token = '';
+    while (i < len && !/\s/.test(cmd[i])) {
+      if (cmd[i] === '"') {
+        i++;
+        while (i < len && cmd[i] !== '"') {
+          if (cmd[i] === '\\' && i + 1 < len) { token += cmd[i + 1]; i += 2; }
+          else { token += cmd[i]; i++; }
+        }
+        if (i >= len) return null;
+        i++;
+      } else if (cmd[i] === "'") {
+        i++;
+        while (i < len && cmd[i] !== "'") { token += cmd[i]; i++; }
+        if (i >= len) return null;
+        i++;
+      } else { token += cmd[i]; i++; }
+    }
+    if (token) tokens.push(token);
+  }
+  return tokens;
+}
+
+/** Cross-platform bun executable check (bun, bun.exe, /path/to/bun) */
+function isBunExecutable(token: string): boolean {
+  const basename = token.replace(/\\/g, '/').split('/').pop() || '';
+  return basename === 'bun' || basename === 'bun.exe';
+}
+
+// Bun flags that consume the next token as a value (not a script path)
+const BUN_VALUE_FLAGS = new Set(['-e', '--eval', '-r', '--require', '--config', '--cwd', '--preload', '--define']);
+
+/** Normalize path for cross-platform comparison (\ → /, strip trailing /) */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+/**
+ * Derive the expected plugin root from this hook's own filesystem location.
+ * Hook is at {plugin-root}/hooks/review-validator.ts.
+ * import.meta.dir is bun-specific: directory of the current file.
+ */
+const EXPECTED_PLUGIN_ROOT = normalizePath(path.resolve(path.join(import.meta.dir, '..')));
+
+/**
+ * Check if tokenized command is a codex-review.ts invocation:
+ *   1. First token is bun executable
+ *   2. First positional token is ${EXPECTED_PLUGIN_ROOT}/scripts/codex-review.ts
+ *   3. --type flag is present after the script
+ *   4. --plugin-root value equals EXPECTED_PLUGIN_ROOT
+ */
+function isCodexScriptCall(tokens: string[]): boolean {
+  if (tokens.length < 4) return false;
+  if (!isBunExecutable(tokens[0])) return false;
+
+  let scriptToken: string | null = null;
+  let scriptIndex = -1;
+  for (let i = 1; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (BUN_VALUE_FLAGS.has(tok)) { i++; continue; }
+    if (tok.startsWith('-')) continue;
+    scriptToken = tok;
+    scriptIndex = i;
+    break;
+  }
+  if (!scriptToken) return false;
+
+  // Script path must be exactly ${pluginRoot}/scripts/codex-review.ts
+  const normScript = normalizePath(scriptToken);
+  if (normScript !== EXPECTED_PLUGIN_ROOT + '/scripts/codex-review.ts') return false;
+
+  // Extract --type and --plugin-root from script args
+  let foundType = false;
+  let pluginRootValue: string | null = null;
+  for (let j = scriptIndex + 1; j < tokens.length; j++) {
+    if (tokens[j] === '--type' || tokens[j].startsWith('--type=')) foundType = true;
+    if (tokens[j] === '--plugin-root' && j + 1 < tokens.length) {
+      pluginRootValue = tokens[j + 1]; j++;
+    } else if (tokens[j].startsWith('--plugin-root=')) {
+      pluginRootValue = tokens[j].slice('--plugin-root='.length);
+    }
+  }
+
+  if (!foundType || !pluginRootValue) return false;
+
+  // --plugin-root value must match the expected root
+  return normalizePath(pluginRootValue) === EXPECTED_PLUGIN_ROOT;
+}
+
+/**
+ * Scan transcript JSONL for a Bash tool_use that invokes codex-review.ts.
+ * Splits commands on shell separators (&&, ||, ;, |, &, \n) and checks each
+ * segment independently. Only matches actual tool_use entries, not static text
+ * in agent definitions or conversation content.
+ */
+function verifyCodexScriptExecution(transcriptPath: string): boolean {
+  try {
+    const content = fs.readFileSync(transcriptPath, 'utf-8');
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      try {
+        const entry = JSON.parse(line);
+        const contentBlocks = entry?.message?.content || entry?.content || [];
+        const blocks = Array.isArray(contentBlocks) ? contentBlocks : [contentBlocks];
+        for (const block of blocks) {
+          if (block?.type === 'tool_use' && block?.name === 'Bash' && typeof block?.input?.command === 'string') {
+            const segments = block.input.command.split(/\s*(?:&&|\|\||[;|&\n])\s*/);
+            for (const seg of segments) {
+              const tokens = shellTokenize(seg.trim());
+              if (tokens && isCodexScriptCall(tokens)) return true;
+            }
+          }
+        }
+      } catch { continue; }
+    }
+    return false;
+  } catch { return false; }
+}
+
 const TASK_DIR = computeTaskDir();
 
 // Actual file names used by the pipeline (per SKILL.md Agent Reference)
@@ -96,8 +228,13 @@ function findMostRecentFile(files: string[]): { path: string; filename: string }
 }
 
 export function validatePlanReview(review: PlanReview, userStory: UserStory | null): ReviewBlockResult | null {
-  const acIds = (userStory?.acceptance_criteria || []).map(ac => ac.id);
-  if (acIds.length === 0) return null; // Skip validation if no ACs
+  if (!userStory) {
+    return { decision: 'block', reason: 'user-story.json missing or unreadable. Cannot validate AC coverage.' };
+  }
+  const acIds = (userStory.acceptance_criteria || []).map(ac => ac.id);
+  if (acIds.length === 0) {
+    return { decision: 'block', reason: 'user-story.json has zero acceptance criteria. Cannot validate review.' };
+  }
 
   const coverage = review.requirements_coverage;
   if (!coverage) {
@@ -129,8 +266,13 @@ export function validatePlanReview(review: PlanReview, userStory: UserStory | nu
 }
 
 export function validateCodeReview(review: CodeReview, userStory: UserStory | null): ReviewBlockResult | null {
-  const acIds = (userStory?.acceptance_criteria || []).map(ac => ac.id);
-  if (acIds.length === 0) return null; // Skip validation if no ACs
+  if (!userStory) {
+    return { decision: 'block', reason: 'user-story.json missing or unreadable. Cannot validate AC coverage.' };
+  }
+  const acIds = (userStory.acceptance_criteria || []).map(ac => ac.id);
+  if (acIds.length === 0) {
+    return { decision: 'block', reason: 'user-story.json has zero acceptance criteria. Cannot validate review.' };
+  }
 
   const verification = review.acceptance_criteria_verification;
   if (!verification) {
@@ -220,15 +362,44 @@ async function main(): Promise<void> {
   // Find the most recently modified review file (just written by agent)
   const recentFile = findMostRecentFile(reviewFiles);
   if (!recentFile) {
-    process.exit(0); // No review file found, allow
+    console.log(JSON.stringify({ decision: 'block', reason: 'No review output file found. Reviewer must write output.' }));
+    process.exit(0);
   }
 
   const review = readJson(recentFile.path) as PlanReview | CodeReview | null;
   if (!review) {
-    process.exit(0); // Can't read review, allow
+    console.log(JSON.stringify({ decision: 'block', reason: `Review file ${recentFile.path} exists but is unreadable or invalid JSON.` }));
+    process.exit(0);
   }
 
   const userStory = readJson(path.join(TASK_DIR, 'user-story.json')) as UserStory | null;
+
+  // Codex-specific enforcement: execution proof, error passthrough, verification stamp
+  if (isCodexReviewer) {
+    // 1. Execution proof — verify the agent actually ran codex-review.ts
+    if (!verifyCodexScriptExecution(transcriptPath)) {
+      console.log(JSON.stringify({
+        decision: 'block',
+        reason: 'Codex reviewer did not execute codex-review.ts. Transcript shows no Bash invocation of the script. Agent must run the script, not fabricate output.'
+      }));
+      process.exit(0);
+    }
+
+    // 2. Error passthrough — when Codex CLI fails, let orchestrator handle it
+    if ((review as Record<string, unknown>).status === 'error') {
+      process.exit(0);
+    }
+
+    // 3. Sanity check — non-error Codex outputs must have _codex_verification
+    const verification = (review as Record<string, unknown>)._codex_verification;
+    if (!verification || typeof verification !== 'object') {
+      console.log(JSON.stringify({
+        decision: 'block',
+        reason: 'Codex review output missing _codex_verification stamp. Output was not produced by codex-review.ts.'
+      }));
+      process.exit(0);
+    }
+  }
 
   // Validate AC coverage
   const error = isPlanReview

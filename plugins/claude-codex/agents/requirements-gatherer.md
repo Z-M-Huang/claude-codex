@@ -41,21 +41,35 @@ When specialist analysis files exist, you are in **synthesis mode**. Specialist 
 
 1. **Read all `analysis-*.json` files** in `.task/` (use Glob to discover all specialist outputs)
 2. **Read the user's Q&A context** provided in the prompt (questions and answers from the interactive session)
-3. **Merge findings** into a unified user story:
+3. **Merge findings** into a draft user story:
    - Technical findings → `requirements.constraints` and `scope.in_scope`
    - UX/Domain findings → `acceptance_criteria` scenarios and `requirements.functional`
    - Security findings → `requirements.non_functional` and explicit security ACs
    - Additional specialist findings → map to the most relevant section based on the specialist's focus (e.g., performance findings → `requirements.non_functional`, accessibility findings → acceptance criteria)
-4. **Resolve contradictions** — take the more conservative view when specialists disagree
-5. **Map specialist findings to acceptance criteria:**
+4. **Validate with user** (MANDATORY — use AskUserQuestion):
+   a. Collect ALL `questions_for_user` from every specialist analysis file
+   b. Filter out questions already answered in Q&A context
+   c. Ask remaining specialist questions (batch up to 3 per AskUserQuestion call)
+   d. Present proposed `out_of_scope` items — ask user to confirm or move any to in_scope
+   e. Present proposed `assumptions` — ask user to confirm, correct, or reject
+   f. Incorporate user answers into the draft
+5. **Resolve contradictions** — take the more conservative view when specialists disagree
+6. **Map specialist findings to acceptance criteria:**
    - Security findings → non-functional requirements or explicit ACs with security validation
    - Technical constraints → `requirements.constraints` section
    - UX findings → acceptance criteria scenarios with user-facing behavior
    - Additional specialist findings → acceptance criteria or non-functional requirements as appropriate
-6. **Write the unified `.task/user-story.json`** using the standard output format below
+7. **Final user approval** (MANDATORY — use AskUserQuestion):
+   - Present a summary: title, total AC count, key scope items, key assumptions
+   - Ask "Approve this user story?" with options: Approve / Revise scope / Add requirements
+   - If user approves: set `approved_by: "user"` and `approved_at` to current ISO timestamp
+   - If user wants changes: incorporate feedback and re-ask
+8. **Write the unified `.task/user-story.json`** using the standard output format below
+9. **Before completing, include this exact final reminder to the orchestrator lead:**
+   - `ACTION REQUIRED: Send 'shutdown_request' to all specialist teammates before marking the requirements task complete.`
 
 In synthesis mode, skip Discovery and Elicitation phases (already done by specialists).
-Go directly to Documentation (output writing).
+The validation step (step 4) replaces direct elicitation — you must still get explicit user input on scope, assumptions, and unanswered specialist questions.
 
 If the specialist analyses are insufficient to produce complete acceptance criteria, note gaps in `scope.assumptions` and set `approved_by: null` for orchestrator follow-up.
 
@@ -161,5 +175,6 @@ When you need clarification:
 1. `.task/user-story.json` has been written using the Write tool
 2. The JSON is valid and contains all required fields
 3. User has approved the requirements (set `approved_by` and `approved_at`)
+4. In synthesis mode, your final response includes the mandatory specialist shutdown reminder
 
 If you cannot get user approval, write the file with `approved_by: null` and the orchestrator will handle approval.

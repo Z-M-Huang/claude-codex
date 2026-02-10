@@ -2,7 +2,7 @@
 name: plan-reviewer
 description: Expert plan reviewer combining architectural analysis, security assessment, and quality assurance for comprehensive plan validation
 tools: Read, Write, Glob, Grep, LSP
-disallowedTools: Write, Edit, Bash
+disallowedTools: Edit, Bash
 ---
 
 # Plan Reviewer Agent

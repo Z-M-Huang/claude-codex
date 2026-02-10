@@ -21,6 +21,7 @@
  */
 
 import { spawn, execSync } from 'child_process';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -35,7 +36,7 @@ function readJson(filePath: string): Record<string, unknown> | null {
 
 const TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 const TASK_DIR = '.task';
-const STDERR_FILE = path.join(TASK_DIR, 'codex_stderr.log');
+const TRACE_FILE = path.join(TASK_DIR, 'codex_trace.log');
 
 // Output file depends on review type (plan vs code)
 function getOutputFile(reviewType: string): string {
@@ -217,15 +218,22 @@ function buildCodexCommand(args: ParsedArgs, isResume: boolean): CmdConfig {
   // Build the review prompt
   let reviewPrompt: string;
 
+  const userStoryFile = '.task/user-story.json';
+  const userStoryRef = fileExists(userStoryFile) ? ` Requirements and acceptance criteria are in ${userStoryFile}.` : '';
+
+  // IMPORTANT: Codex with --output-schema tends to emit structured JSON immediately
+  // without reading files first. The prompt MUST explicitly instruct file reading.
+  const readFilesFirst = `IMPORTANT: You MUST use your shell tools to read ALL referenced files BEFORE producing your review output. Do NOT output the review JSON until you have read and analyzed every file. Read the files first, then produce your final structured review.`;
+
   if (isResume && args.changesSummary) {
     // Resume with changes summary - focused re-review
-    reviewPrompt = `Re-review after fixes. Changes made:\n${args.changesSummary}\n\nVerify fixes address previous concerns. Check against ${standardsPath}.`;
+    reviewPrompt = `${readFilesFirst}\n\nRe-review after fixes. Changes made:\n${args.changesSummary}\n\nVerify fixes address previous concerns. Check against ${standardsPath}.${userStoryRef}`;
   } else if (isResume) {
     // Resume without summary - general re-review
-    reviewPrompt = `Re-review ${inputFile}. Previous concerns should be addressed. Verify against ${standardsPath}.`;
+    reviewPrompt = `${readFilesFirst}\n\nRe-review ${inputFile}. Previous concerns should be addressed. Verify against ${standardsPath}.${userStoryRef}`;
   } else {
     // Initial review - point to files, criteria in standards.md
-    reviewPrompt = `Review ${inputFile} against ${standardsPath}. Final gate review for ${args.type === 'plan' ? 'plan approval' : 'code quality'}. If unclear, set needs_clarification: true.`;
+    reviewPrompt = `${readFilesFirst}\n\nReview ${inputFile} against ${standardsPath}.${userStoryRef} Final gate review for ${args.type === 'plan' ? 'plan approval' : 'code quality'}. Map each acceptance criterion to plan steps (plan review) or verify implementation evidence (code review). Only set needs_clarification if you have a genuine question for the user after reading the files — NOT because you haven't read them yet.`;
   }
 
   // Build command args - output file depends on review type
@@ -273,7 +281,7 @@ interface RunResult {
 
 function runCodex(cmdConfig: CmdConfig): Promise<RunResult> {
   return new Promise((resolve) => {
-    const stderrStream = fs.createWriteStream(STDERR_FILE);
+    const stderrStream = fs.createWriteStream(TRACE_FILE);
     let timedOut = false;
 
     const isWindows = os.platform() === 'win32';
@@ -316,7 +324,7 @@ function runCodex(cmdConfig: CmdConfig): Promise<RunResult> {
         // Check stderr for specific errors
         let errorType = 'execution_failed';
         try {
-          const stderr = fs.readFileSync(STDERR_FILE, 'utf8');
+          const stderr = fs.readFileSync(TRACE_FILE, 'utf8');
           if (stderr.includes('authentication') || stderr.includes('auth')) {
             errorType = 'auth_required';
           } else if (stderr.includes('not found') || stderr.includes('command not found')) {
@@ -345,7 +353,7 @@ function runCodex(cmdConfig: CmdConfig): Promise<RunResult> {
 
 // ================== OUTPUT VALIDATION ==================
 
-function validateOutput(reviewType: string): { valid: boolean; error?: string; output?: Record<string, unknown> } {
+function validateOutput(reviewType: string): { valid: boolean; error?: string; output?: Record<string, unknown>; isPlaceholder?: boolean } {
   const outputFile = getOutputFile(reviewType);
   if (!fileExists(outputFile)) {
     return { valid: false, error: 'Output file not created' };
@@ -370,6 +378,35 @@ function validateOutput(reviewType: string): { valid: boolean; error?: string; o
   // Fix: Properly check summary is a string (not just truthy)
   if (typeof output.summary !== 'string') {
     return { valid: false, error: 'Output missing "summary" field or summary is not a string' };
+  }
+
+  // Detect placeholder reviews where Codex output structured JSON without reading files.
+  // These typically have needs_clarification: true with "I'm going to read..." messages
+  // and empty requirements_coverage mapping.
+  if (output.needs_clarification === true) {
+    const questions = output.clarification_questions as string[] | undefined;
+    if (questions && questions.length > 0) {
+      const placeholderPatterns = [
+        /^(I'm |I am |Reading |Starting |Collecting |Initializing )/i,
+        /read(ing)? .*(file|story|plan|standard|artifact)/i,
+        /\bnow\b.*\b(read|review|analyz)/i,
+      ];
+      const allPlaceholder = questions.every(q =>
+        placeholderPatterns.some(p => p.test(q))
+      );
+      if (allPlaceholder) {
+        return { valid: false, isPlaceholder: true, error: 'Codex produced a placeholder review without reading files. Clarification questions are status messages, not real questions. Will retry.' };
+      }
+    }
+  }
+
+  // For plan reviews, check that requirements_coverage.mapping is not empty
+  // (unless status is needs_clarification with genuine questions)
+  const coverage = output.requirements_coverage as { mapping?: unknown[]; missing?: unknown[] } | undefined;
+  if (coverage && Array.isArray(coverage.mapping) && coverage.mapping.length === 0
+      && Array.isArray(coverage.missing) && coverage.missing.length === 0
+      && output.status !== 'needs_clarification') {
+    return { valid: false, error: 'Review has empty requirements_coverage mapping with no missing ACs — likely a placeholder response' };
   }
 
   return { valid: true, output: output };
@@ -474,7 +511,37 @@ async function main(): Promise<void> {
   }
 
   // Validate output (pass review type for correct status validation)
-  const validation = validateOutput(args.type!);
+  let validation = validateOutput(args.type!);
+
+  // Retry once if Codex produced a placeholder response (immediate JSON without reading files)
+  if (!validation.valid && validation.isPlaceholder) {
+    console.log(JSON.stringify({
+      event: 'placeholder_detected',
+      action: 'retrying_fresh',
+      error: validation.error
+    }));
+
+    // Remove session marker so retry starts fresh
+    removeSessionMarker(args.type!);
+
+    // Retry with a fresh (non-resume) invocation
+    const retryCmdConfig = buildCodexCommand(args, false);
+    const retryResult = await runCodex(retryCmdConfig);
+
+    if (retryResult.success) {
+      validation = validateOutput(args.type!);
+    } else {
+      writeError(`Retry after placeholder also failed (exit ${retryResult.code})`, 'codex_execution', args.type);
+      console.log(JSON.stringify({
+        event: 'error',
+        phase: 'codex_execution_retry',
+        error: retryResult.error,
+        code: retryResult.code
+      }));
+      process.exit(2);
+    }
+  }
+
   if (!validation.valid) {
     writeError(validation.error!, 'output_validation', args.type);
     console.log(JSON.stringify({
@@ -486,7 +553,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Success - create session marker for future resume (scoped by type)
+  // Success - stamp output with verification token proving script execution
+  const verificationToken = crypto.randomUUID();
+  validation.output!._codex_verification = {
+    token: verificationToken,
+    executed_by: 'codex-review.ts',
+    timestamp: new Date().toISOString(),
+    pid: process.pid
+  };
+  writeJson(getOutputFile(args.type!), validation.output!);
+
+  // Create session marker for future resume (scoped by type)
   createSessionMarker(args.type!);
 
   console.log(JSON.stringify({
@@ -495,7 +572,8 @@ async function main(): Promise<void> {
     summary: validation.output!.summary,
     needs_clarification: validation.output!.needs_clarification || false,
     output_file: getOutputFile(args.type!),
-    session_marker_created: true
+    session_marker_created: true,
+    verification_token: verificationToken
   }));
 
   process.exit(0);
