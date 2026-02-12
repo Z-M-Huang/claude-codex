@@ -61,7 +61,7 @@ Multi-Session Orchestrator Pipeline (Task-Based Enforcement)
 
 ---
 
-## Team-Based Requirements Gathering (v1.4.2)
+## Team-Based Requirements Gathering (v1.4.3)
 
 Requirements gathering uses Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) to explore from multiple perspectives in parallel, producing richer user stories from the start.
 

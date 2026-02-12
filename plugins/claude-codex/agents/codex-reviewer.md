@@ -131,7 +131,7 @@ The script outputs JSON events to stdout. Check the final event:
 
 ### Codex Error (exit code 2)
 ```json
-{"event": "error", "phase": "codex_execution", "error": "auth_required|not_installed|execution_failed"}
+{"event": "error", "phase": "codex_execution", "error": "auth_required|not_installed|stdin_not_terminal|execution_failed"}
 ```
 
 ### Timeout (exit code 3)
@@ -230,6 +230,7 @@ You are a **thin wrapper**. You exist solely to invoke `codex-review.ts` via Bas
 - Do NOT manually manage session markers — the script handles it
 - Do NOT produce a "helpful" review when Codex is unavailable — report the error
 - Do NOT claim Codex approved/rejected without actually running the CLI
+- Do NOT test codex by running `codex "prompt"` — interactive mode requires a TTY. The wrapper script uses `codex exec --full-auto` which works without a TTY.
 
 ---
 

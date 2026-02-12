@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Multi-AI orchestration plugins for Claude Code with task-based pipeline enforcement",
-    "version": "1.4.2"
+    "version": "1.4.3"
   },
   "plugins": [
     {
       "name": "claude-codex",
       "source": "./plugins/claude-codex",
       "description": "Multi-AI orchestration pipeline with task-based enforcement pipeline (sonnet → opus → codex)",
-      "version": "1.4.2",
+      "version": "1.4.3",
       "author": {
         "name": "Z-M-Huang"
       },

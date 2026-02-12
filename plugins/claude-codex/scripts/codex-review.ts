@@ -233,7 +233,10 @@ function buildCodexCommand(args: ParsedArgs, isResume: boolean): CmdConfig {
     reviewPrompt = `${readFilesFirst}\n\nRe-review ${inputFile}. Previous concerns should be addressed. Verify against ${standardsPath}.${userStoryRef}`;
   } else {
     // Initial review - point to files, criteria in standards.md
-    reviewPrompt = `${readFilesFirst}\n\nReview ${inputFile} against ${standardsPath}.${userStoryRef} Final gate review for ${args.type === 'plan' ? 'plan approval' : 'code quality'}. Map each acceptance criterion to plan steps (plan review) or verify implementation evidence (code review). Only set needs_clarification if you have a genuine question for the user after reading the files — NOT because you haven't read them yet.`;
+    const criteriaInstruction = args.type === 'plan'
+      ? 'Map each acceptance criterion to plan steps.'
+      : 'Verify implementation evidence for each acceptance criterion.';
+    reviewPrompt = `${readFilesFirst}\n\nReview ${inputFile} against ${standardsPath}.${userStoryRef} Final gate review for ${args.type === 'plan' ? 'plan approval' : 'code quality'}. ${criteriaInstruction} Only set needs_clarification if you have a genuine question for the user after reading the files — NOT because you haven't read them yet.`;
   }
 
   // Build command args - output file depends on review type
@@ -325,7 +328,9 @@ function runCodex(cmdConfig: CmdConfig): Promise<RunResult> {
         let errorType = 'execution_failed';
         try {
           const stderr = fs.readFileSync(TRACE_FILE, 'utf8');
-          if (stderr.includes('authentication') || stderr.includes('auth')) {
+          if (stderr.includes('stdin is not a terminal') || stderr.includes('not a tty')) {
+            errorType = 'stdin_not_terminal';
+          } else if (stderr.includes('authentication') || stderr.includes('auth')) {
             errorType = 'auth_required';
           } else if (stderr.includes('not found') || stderr.includes('command not found')) {
             errorType = 'not_installed';
@@ -405,7 +410,8 @@ function validateOutput(reviewType: string): { valid: boolean; error?: string; o
   const coverage = output.requirements_coverage as { mapping?: unknown[]; missing?: unknown[] } | undefined;
   if (coverage && Array.isArray(coverage.mapping) && coverage.mapping.length === 0
       && Array.isArray(coverage.missing) && coverage.missing.length === 0
-      && output.status !== 'needs_clarification') {
+      && output.status !== 'needs_clarification'
+      && output.status !== 'approved') {
     return { valid: false, error: 'Review has empty requirements_coverage mapping with no missing ACs — likely a placeholder response' };
   }
 
@@ -490,6 +496,9 @@ async function main(): Promise<void> {
         break;
       case 'not_installed':
         errorMsg = 'Codex CLI not installed. Install from: https://codex.openai.com';
+        break;
+      case 'stdin_not_terminal':
+        errorMsg = "Codex CLI requires a terminal for interactive mode. The wrapper script uses 'codex exec --full-auto' which should not require a TTY. Check that the codex-reviewer agent is invoking the wrapper script, not running codex directly.";
         break;
       case 'session_expired':
         errorMsg = 'Codex session expired and retry failed';

@@ -1,6 +1,6 @@
 {
   "name": "claude-codex",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Multi-AI orchestration pipeline with Task-based enforcement and Codex final gate",
   "author": {
     "name": "Z-M-Huang",
