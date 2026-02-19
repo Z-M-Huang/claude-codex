@@ -21,19 +21,23 @@ describe('review-validator', () => {
   });
 
   describe('validateCodeReview', () => {
-    test('returns null (valid) when no ACs in user story', () => {
+    test('blocks when no ACs in user story', () => {
       const userStory = { acceptance_criteria: [] as Array<{ id: string }> };
       const review = { status: 'approved' };
 
       const result = validateCodeReview(review, userStory);
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('zero acceptance criteria');
     });
 
-    test('returns null (valid) when no user story', () => {
+    test('blocks when no user story', () => {
       const review = { status: 'approved' };
 
       const result = validateCodeReview(review, null);
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('missing or unreadable');
     });
 
     test('blocks when acceptance_criteria_verification missing', () => {
@@ -171,12 +175,14 @@ describe('review-validator', () => {
   });
 
   describe('validatePlanReview', () => {
-    test('returns null (valid) when no ACs in user story', () => {
+    test('blocks when no ACs in user story', () => {
       const userStory = { acceptance_criteria: [] as Array<{ id: string }> };
       const review = { status: 'approved' };
 
       const result = validatePlanReview(review, userStory);
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.decision).toBe('block');
+      expect(result!.reason).toContain('zero acceptance criteria');
     });
 
     test('blocks when requirements_coverage missing', () => {

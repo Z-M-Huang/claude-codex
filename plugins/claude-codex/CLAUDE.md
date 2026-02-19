@@ -61,7 +61,7 @@ Multi-Session Orchestrator Pipeline (Task-Based Enforcement)
 
 ---
 
-## Team-Based Requirements Gathering (v1.4.3)
+## Team-Based Requirements Gathering (v1.5.0)
 
 Requirements gathering uses Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) to explore from multiple perspectives in parallel, producing richer user stories from the start.
 
@@ -171,8 +171,11 @@ This maintains the sequential requirement and ensures the same reviewer validate
 ## Quick Start
 
 ```
-/multi-ai [description of what you want]
+/multi-ai [description of what you want]    # Feature development
+/bug-fix [description of the bug]           # Bug fix
 ```
+
+### Feature Development (`/multi-ai`)
 
 The pipeline will:
 1. **Reset, create pipeline team & task chain** with dependencies
@@ -184,6 +187,23 @@ The pipeline will:
 7. **Complete** - Report results
 
 **No phase skipping:** Every pipeline run executes ALL phases in order. Pre-existing plans or context from plan mode are input to the specialists, not a substitute for the pipeline. Never skip team-based requirements gathering.
+
+### Bug Fix (`/bug-fix`)
+
+The bug-fix pipeline uses a different early-phase approach optimized for diagnosing and fixing bugs:
+
+1. **Dual RCA** — Two root-cause-analyst agents (Sonnet + Opus) analyze the bug in parallel
+2. **Orchestrator Consolidation** — Main thread reads both RCA outputs, consolidates diagnosis, writes `user-story.json` + `plan-refined.json`
+3. **Codex Validation** — Codex reviews the consolidated RCA + fix plan before implementation
+4. **Implementation** — Minimal fix targeting the root cause
+5. **Code Reviews** (task-enforced) — Sequential: Sonnet → Opus → Codex gate
+
+**Key differences from `/multi-ai`:**
+- No requirements-gatherer, planner, or plan-reviewer agents
+- Orchestrator writes user-story.json and plan-refined.json directly from RCA findings
+- 7 tasks instead of 9 (T1+T2 parallel RCA, T3 Codex validation, T4 implementation, T5-T7 code reviews)
+- Fix plan emphasizes smallest possible change, not architectural design
+- No `pipeline-tasks.json` for phase detection — uses `rca-*.json` presence instead
 
 ---
 
@@ -198,6 +218,7 @@ The pipeline uses specialized agents defined in `agents/` directory. Model selec
 | **plan-reviewer** | sonnet/opus | Architect + Security + QA hybrid |
 | **implementer** | sonnet | Fullstack + TDD + Quality hybrid |
 | **code-reviewer** | sonnet/opus | Security + Performance + QA hybrid |
+| **root-cause-analyst** | sonnet/opus | Debugging + fault isolation for autonomous bug diagnosis |
 
 See `AGENTS.md` for detailed agent specifications.
 
@@ -231,7 +252,8 @@ Codex (independent AI) provides final approval:
 
 | Skill | Purpose | Phase |
 |-------|---------|-------|
-| `/multi-ai` | Start pipeline (entry point) | All |
+| `/multi-ai` | Start feature development pipeline (entry point) | All |
+| `/bug-fix` | Start bug-fix pipeline — dual RCA, consolidation, Codex validation, fix, code review | All |
 
 **Note:** Requirements gathering, planning, review (sonnet/opus), and implementation are handled by custom agents via Task tool. Codex final gate review uses the `codex-reviewer` agent via `Task(subagent_type: "claude-codex:codex-reviewer", model: "external")`.
 
@@ -333,6 +355,18 @@ If stuck:
 | Plan Review #2 | plan-reviewer | opus | Deep architectural analysis |
 | Plan Review #3 | **Codex** | external | Independent final gate |
 | Implementation | implementer | sonnet | Balanced speed/quality |
+| Code Review #1 | code-reviewer | sonnet | Quick code check |
+| Code Review #2 | code-reviewer | opus | Deep code analysis |
+| Code Review #3 | **Codex** | external | Independent final gate |
+
+### Bug-Fix Pipeline (`/bug-fix`)
+
+| Phase | Agent | Model | Reason |
+|-------|-------|-------|--------|
+| RCA #1 | root-cause-analyst | sonnet | Fast parallel diagnosis |
+| RCA #2 | root-cause-analyst | **opus** | Deep parallel diagnosis |
+| RCA + Plan Validation | **Codex** | external | Independent validation gate |
+| Implementation | implementer | sonnet | Minimal targeted fix |
 | Code Review #1 | code-reviewer | sonnet | Quick code check |
 | Code Review #2 | code-reviewer | opus | Deep code analysis |
 | Code Review #3 | **Codex** | external | Independent final gate |

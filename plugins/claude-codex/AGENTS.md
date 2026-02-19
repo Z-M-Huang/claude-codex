@@ -178,3 +178,42 @@ Flag as warning if you see:
 - Unnecessary configuration/flexibility
 - Complex patterns for simple problems
 - Excessive layers of indirection
+
+---
+
+# Root Cause Analyst Agent
+
+Expert root cause analyst combining debugging skills with systematic fault isolation for autonomous bug diagnosis.
+
+## Overview
+
+| Property | Value |
+|----------|-------|
+| **File** | `agents/root-cause-analyst.md` |
+| **Tools** | Read, Write, Glob, Grep, Bash, LSP |
+| **Disallowed** | Edit |
+| **Recommended Models** | sonnet, opus |
+| **Used By** | `/bug-fix` pipeline (dual RCA phase) |
+
+## Purpose
+
+Autonomously diagnoses bugs through a 5-phase systematic process: Understand → Reproduce → Localize → Root Cause Identification → Document. Does NOT fix the bug — only diagnoses it.
+
+## Key Characteristics
+
+- **Autonomous** — No user interaction, no AskUserQuestion
+- **Read-only** — Cannot edit source files (no Edit tool), only writes diagnostic output
+- **Dual perspective** — Two instances (Sonnet + Opus) run in parallel for independent diagnoses
+- **Evidence-based** — Requires code evidence for root cause, reports confidence level
+
+## Output
+
+Writes structured RCA output to `.task/rca-sonnet.json` or `.task/rca-opus.json` (specified by orchestrator). Key fields:
+
+- `root_cause.summary` — One-sentence diagnosis
+- `root_cause.root_file` — File where bug originates
+- `root_cause.confidence` — high / medium / low
+- `root_cause.category` — Bug classification (logic_error, race_condition, missing_validation, etc.)
+- `impact_analysis` — Affected files, blast radius, regression risk
+- `fix_constraints` — What must/must not change
+- `recommended_approach` — Suggested fix direction (without implementing it)

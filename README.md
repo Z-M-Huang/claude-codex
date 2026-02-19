@@ -1,5 +1,6 @@
 # Claude Codex Marketplace
 
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=Z-M-Huang.claude-codex&style=flat-square)
 ![GitHub release](https://img.shields.io/github/v/release/Z-M-Huang/claude-codex?style=flat-square)
 ![GitHub license](https://img.shields.io/github/license/Z-M-Huang/claude-codex?style=flat-square)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Z-M-Huang/claude-codex?style=flat-square)
@@ -64,8 +65,11 @@ echo ".task" >> .gitignore
 After installation, use skills with the plugin namespace:
 
 ```bash
-# Start the full pipeline
+# Start the full pipeline (feature development)
 /claude-codex:multi-ai Add user authentication with JWT
+
+# Start the bug-fix pipeline (dual RCA + targeted fix)
+/claude-codex:bug-fix Login fails silently when session token expires
 ```
 
 ## Available Plugins
@@ -77,7 +81,8 @@ Multi-AI orchestration pipeline with **hook-based enforcement** using Task + Res
 
 | Skill          | Purpose                                     |
 | -------------- | ------------------------------------------- |
-| `multi-ai`     | Pipeline entry point (orchestrates agents)  |
+| `multi-ai`     | Feature development pipeline (orchestrates agents) |
+| `bug-fix`      | Bug-fix pipeline (dual RCA + Codex validation + targeted fix) |
 
 **Custom Agents:**
 
@@ -88,6 +93,7 @@ Multi-AI orchestration pipeline with **hook-based enforcement** using Task + Res
 | `plan-reviewer`         | Both   | Architecture + Security + QA validation  |
 | `implementer`           | Sonnet | Fullstack + TDD + Quality implementation |
 | `code-reviewer`         | Both   | Security + Performance + QA validation   |
+| `root-cause-analyst`    | Both   | Debugging + fault isolation (bug-fix pipeline) |
 
 ## Recommended Subscriptions
 
@@ -98,7 +104,7 @@ Multi-AI orchestration pipeline with **hook-based enforcement** using Task + Res
 
 ## How It Works
 
-### Quick Start with `/multi-ai`
+### Feature Development with `/multi-ai`
 
 ```bash
 /claude-codex:multi-ai Add user authentication with JWT tokens
@@ -113,9 +119,23 @@ This command orchestrates specialized agents:
 5. **Code Reviews** (autonomous) - `code-reviewer` agents (sonnet, opus) + Codex gate
 6. **Complete** - Reports results
 
+### Bug Fixes with `/bug-fix`
+
+```bash
+/claude-codex:bug-fix Login fails silently when session token expires
+```
+
+Optimized for diagnosing and fixing bugs with minimal, targeted changes:
+
+1. **Dual RCA** - Two `root-cause-analyst` agents (Sonnet + Opus) analyze the bug in parallel
+2. **Consolidation** - Orchestrator reads both RCA outputs, consolidates diagnosis, writes fix plan
+3. **Codex Validation** - Codex reviews the consolidated RCA + fix plan
+4. **Implementation** - Minimal fix targeting the root cause
+5. **Code Reviews** (autonomous) - `code-reviewer` agents (sonnet, opus) + Codex gate
+
 ### Task-Based Pipeline Enforcement
 
-The pipeline uses **task dependencies**, **hook validation**, and **agent teams** (v1.4.3):
+The pipeline uses **task dependencies**, **hook validation**, and **agent teams** (v1.5.0):
 
 ```
 ┌────────────────────────────────────────────────────┐
@@ -158,9 +178,11 @@ claude-codex/
 │       │   ├── planner.md
 │       │   ├── plan-reviewer.md
 │       │   ├── implementer.md
-│       │   └── code-reviewer.md
+│       │   ├── code-reviewer.md
+│       │   └── root-cause-analyst.md
 │       ├── skills/               # Pipeline skills
-│       │   └── multi-ai/         # Main orchestrator
+│       │   ├── multi-ai/         # Feature development orchestrator
+│       │   └── bug-fix/          # Bug-fix orchestrator
 │       ├── scripts/              # Orchestration scripts
 │       ├── hooks/                # Pipeline enforcement hooks
 │       ├── docs/                 # Standards and workflow

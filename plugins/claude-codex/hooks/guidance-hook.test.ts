@@ -97,6 +97,8 @@ describe('guidance-hook', () => {
         plan: null,
         pipelineTasks: null,
         analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
         planReviewSonnet: null,
         planReviewOpus: null,
         planReviewCodex: null,
@@ -115,6 +117,8 @@ describe('guidance-hook', () => {
         plan: null,
         pipelineTasks: { requirements: 'T1' },
         analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
         planReviewSonnet: null,
         planReviewOpus: null,
         planReviewCodex: null,
@@ -136,6 +140,8 @@ describe('guidance-hook', () => {
         analysisFiles: [
           { name: 'technical', file: 'analysis-technical.json', data: {} },
         ],
+        rcaSonnet: null,
+        rcaOpus: null,
         planReviewSonnet: null,
         planReviewOpus: null,
         planReviewCodex: null,
@@ -162,6 +168,8 @@ describe('guidance-hook', () => {
           { name: 'performance', file: 'analysis-performance.json', data: {} },
           { name: 'architecture', file: 'analysis-architecture.json', data: {} },
         ],
+        rcaSonnet: null,
+        rcaOpus: null,
         planReviewSonnet: null,
         planReviewOpus: null,
         planReviewCodex: null,
@@ -183,6 +191,8 @@ describe('guidance-hook', () => {
         plan: null,
         pipelineTasks: { requirements: 'T1' },
         analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
         planReviewSonnet: null,
         planReviewOpus: null,
         planReviewCodex: null,
@@ -201,6 +211,8 @@ describe('guidance-hook', () => {
         plan: null,
         pipelineTasks: null,
         analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
         planReviewSonnet: null,
         planReviewOpus: null,
         planReviewCodex: null,
@@ -219,6 +231,8 @@ describe('guidance-hook', () => {
         plan: null,
         pipelineTasks: { requirements: 'T1' },
         analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
         planReviewSonnet: null,
         planReviewOpus: null,
         planReviewCodex: null,
@@ -229,6 +243,175 @@ describe('guidance-hook', () => {
       };
       const result = determinePhase(progress);
       expect(result.message).toContain('spawning fails');
+    });
+
+    // ─── Bug-Fix Pipeline Phase Transitions ───────────────────────────
+
+    test('bug-fix: returns root_cause_analysis (pending) at startup before any RCA files', () => {
+      const progress: PipelineProgress = {
+        userStory: null,
+        plan: null,
+        pipelineTasks: { pipeline_type: 'bug-fix', team_name: 'test' },
+        analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
+        planReviewSonnet: null,
+        planReviewOpus: null,
+        planReviewCodex: null,
+        implResult: null,
+        codeReviewSonnet: null,
+        codeReviewOpus: null,
+        codeReviewCodex: null,
+      };
+      const result = determinePhase(progress);
+      expect(result.phase).toBe('root_cause_analysis');
+      expect(result.message).toContain('pending');
+    });
+
+    test('bug-fix: returns root_cause_analysis (in progress) when one RCA done', () => {
+      const progress: PipelineProgress = {
+        userStory: null,
+        plan: null,
+        pipelineTasks: { pipeline_type: 'bug-fix', team_name: 'test' },
+        analysisFiles: [],
+        rcaSonnet: { root_cause: { summary: 'test' } },
+        rcaOpus: null,
+        planReviewSonnet: null,
+        planReviewOpus: null,
+        planReviewCodex: null,
+        implResult: null,
+        codeReviewSonnet: null,
+        codeReviewOpus: null,
+        codeReviewCodex: null,
+      };
+      const result = determinePhase(progress);
+      expect(result.phase).toBe('root_cause_analysis');
+      expect(result.message).toContain('Sonnet: done');
+      expect(result.message).toContain('Opus: running');
+    });
+
+    test('bug-fix: returns root_cause_analysis (consolidation) when both RCAs done', () => {
+      const progress: PipelineProgress = {
+        userStory: null,
+        plan: null,
+        pipelineTasks: { pipeline_type: 'bug-fix', team_name: 'test' },
+        analysisFiles: [],
+        rcaSonnet: { root_cause: { summary: 'test' } },
+        rcaOpus: { root_cause: { summary: 'test' } },
+        planReviewSonnet: null,
+        planReviewOpus: null,
+        planReviewCodex: null,
+        implResult: null,
+        codeReviewSonnet: null,
+        codeReviewOpus: null,
+        codeReviewCodex: null,
+      };
+      const result = determinePhase(progress);
+      expect(result.phase).toBe('root_cause_analysis');
+      expect(result.message).toContain('Consolidation');
+    });
+
+    test('bug-fix: skips Sonnet/Opus plan reviews, goes to Codex validation', () => {
+      const progress: PipelineProgress = {
+        userStory: { title: 'Fix: test bug' },
+        plan: { steps: [] },
+        pipelineTasks: { pipeline_type: 'bug-fix', team_name: 'test' },
+        analysisFiles: [],
+        rcaSonnet: { root_cause: { summary: 'test' } },
+        rcaOpus: { root_cause: { summary: 'test' } },
+        planReviewSonnet: null,
+        planReviewOpus: null,
+        planReviewCodex: null,
+        implResult: null,
+        codeReviewSonnet: null,
+        codeReviewOpus: null,
+        codeReviewCodex: null,
+      };
+      const result = determinePhase(progress);
+      // Must NOT be plan_review_sonnet — bug-fix skips to Codex
+      expect(result.phase).toBe('plan_review_codex');
+      expect(result.message).toContain('RCA + Plan Validation');
+    });
+
+    test('bug-fix: proceeds to implementation after Codex plan validation approved', () => {
+      const progress: PipelineProgress = {
+        userStory: { title: 'Fix: test bug' },
+        plan: { steps: [] },
+        pipelineTasks: { pipeline_type: 'bug-fix', team_name: 'test' },
+        analysisFiles: [],
+        rcaSonnet: { root_cause: { summary: 'test' } },
+        rcaOpus: { root_cause: { summary: 'test' } },
+        planReviewSonnet: null,
+        planReviewOpus: null,
+        planReviewCodex: { status: 'approved' },
+        implResult: null,
+        codeReviewSonnet: null,
+        codeReviewOpus: null,
+        codeReviewCodex: null,
+      };
+      const result = determinePhase(progress);
+      expect(result.phase).toBe('implementation');
+    });
+
+    test('bug-fix: does NOT fall into requirements_team_pending at startup', () => {
+      const progress: PipelineProgress = {
+        userStory: null,
+        plan: null,
+        pipelineTasks: { pipeline_type: 'bug-fix', team_name: 'test' },
+        analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
+        planReviewSonnet: null,
+        planReviewOpus: null,
+        planReviewCodex: null,
+        implResult: null,
+        codeReviewSonnet: null,
+        codeReviewOpus: null,
+        codeReviewCodex: null,
+      };
+      const result = determinePhase(progress);
+      expect(result.phase).not.toBe('requirements_team_pending');
+      expect(result.phase).not.toBe('requirements_gathering');
+    });
+
+    test('multi-ai: still returns requirements_team_pending (regression check)', () => {
+      const progress: PipelineProgress = {
+        userStory: null,
+        plan: null,
+        pipelineTasks: { requirements: 'T1' },
+        analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
+        planReviewSonnet: null,
+        planReviewOpus: null,
+        planReviewCodex: null,
+        implResult: null,
+        codeReviewSonnet: null,
+        codeReviewOpus: null,
+        codeReviewCodex: null,
+      };
+      const result = determinePhase(progress);
+      expect(result.phase).toBe('requirements_team_pending');
+    });
+
+    test('multi-ai: still requires Sonnet plan review before Codex (regression check)', () => {
+      const progress: PipelineProgress = {
+        userStory: { title: 'test' },
+        plan: { steps: [] },
+        pipelineTasks: { requirements: 'T1' },
+        analysisFiles: [],
+        rcaSonnet: null,
+        rcaOpus: null,
+        planReviewSonnet: null,
+        planReviewOpus: null,
+        planReviewCodex: null,
+        implResult: null,
+        codeReviewSonnet: null,
+        codeReviewOpus: null,
+        codeReviewCodex: null,
+      };
+      const result = determinePhase(progress);
+      expect(result.phase).toBe('plan_review_sonnet');
     });
   });
 });

@@ -16,6 +16,7 @@ import {
   computeTaskDir,
   determinePhase,
   getProgress,
+  getPipelineType,
   type PhaseToken,
   type PhaseResult,
 } from './pipeline-utils.ts';
@@ -105,7 +106,7 @@ function showStatus(): void {
   if (!fs.existsSync(TASK_DIR)) {
     logInfo('No .task directory found. Pipeline not started.');
     console.log('');
-    console.log('To start, invoke /multi-ai with your request.');
+    console.log('To start, invoke /multi-ai or /bug-fix with your request.');
     return;
   }
 
@@ -129,16 +130,30 @@ function showStatus(): void {
       console.log('Specialist teammates are exploring codebase and domain in parallel.');
       console.log('Wait for ALL specialists to finish before synthesizing.');
       break;
-    case 'plan_drafting':
-      console.log('Phase: Planning');
-      console.log('Use planner agent (opus) to create plan-refined.json');
+    case 'plan_drafting': {
+      const ptDraft = getPipelineType(progress.pipelineTasks);
+      if (ptDraft === 'bug-fix') {
+        console.log('Phase: Planning');
+        console.log('Consolidation incomplete — write plan-refined.json from RCA findings.');
+      } else {
+        console.log('Phase: Planning');
+        console.log('Use planner agent (opus) to create plan-refined.json');
+      }
       break;
+    }
     case 'plan_review_sonnet':
     case 'plan_review_opus':
-    case 'plan_review_codex':
-      console.log('Phase: Plan Review');
-      console.log('Run sequential plan reviews: sonnet -> opus -> codex');
+    case 'plan_review_codex': {
+      const ptReview = getPipelineType(progress.pipelineTasks);
+      if (ptReview === 'bug-fix') {
+        console.log('Phase: RCA + Plan Validation');
+        console.log('Run Codex validation of consolidated RCA and fix plan.');
+      } else {
+        console.log('Phase: Plan Review');
+        console.log('Run sequential plan reviews: sonnet -> opus -> codex');
+      }
       break;
+    }
     case 'fix_plan_sonnet':
     case 'fix_plan_opus':
     case 'fix_plan_codex':
@@ -172,6 +187,21 @@ function showStatus(): void {
       console.log('If you can answer directly, do so. Otherwise use AskUserQuestion.');
       console.log('After answering, re-run the same reviewer.');
       break;
+    case 'root_cause_analysis': {
+      const sonnetDone = !!progress.rcaSonnet;
+      const opusDone = !!progress.rcaOpus;
+      if (sonnetDone && opusDone) {
+        console.log('Phase: RCA Consolidation');
+        console.log('Both analyses complete. Consolidate findings into user-story.json + plan-refined.json.');
+      } else if (sonnetDone || opusDone) {
+        console.log('Phase: Root Cause Analysis (In Progress)');
+        console.log(`Sonnet: ${sonnetDone ? 'complete' : 'running'}, Opus: ${opusDone ? 'complete' : 'running'}.`);
+      } else {
+        console.log('Phase: Root Cause Analysis (Pending)');
+        console.log('Spawn root-cause-analyst agents (Sonnet + Opus) in parallel.');
+      }
+      break;
+    }
     case 'complete':
       logSuccess('Pipeline complete! All reviews approved.');
       console.log('');
@@ -219,7 +249,7 @@ function runDryRun(): void {
 
   // 3. Check skills
   const skillsDir = path.join(PLUGIN_ROOT, 'skills');
-  const requiredSkills = ['multi-ai/SKILL.md'];
+  const requiredSkills = ['multi-ai/SKILL.md', 'bug-fix/SKILL.md'];
   let skillsOk = true;
   if (fs.existsSync(skillsDir)) {
     for (const skill of requiredSkills) {
@@ -244,6 +274,7 @@ function runDryRun(): void {
     'implementer.md',
     'code-reviewer.md',
     'codex-reviewer.md',
+    'root-cause-analyst.md',
   ];
   let agentsOk = true;
   if (fs.existsSync(agentsDir)) {

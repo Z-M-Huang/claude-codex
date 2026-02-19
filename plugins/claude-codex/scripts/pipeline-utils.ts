@@ -17,6 +17,7 @@ import path from 'path';
  */
 export type PhaseToken =
   | 'idle'
+  | 'root_cause_analysis'
   | 'requirements_gathering'
   | 'requirements_team_pending'
   | 'requirements_team_exploring'
@@ -62,6 +63,8 @@ export interface PipelineProgress {
   plan: unknown | null;
   pipelineTasks: unknown | null;
   analysisFiles: AnalysisFile[];
+  rcaSonnet: Record<string, unknown> | null;
+  rcaOpus: Record<string, unknown> | null;
   planReviewSonnet: { status: string; clarification_questions?: string[] } | null;
   planReviewOpus: { status: string; clarification_questions?: string[] } | null;
   planReviewCodex: { status: string; clarification_questions?: string[] } | null;
@@ -146,6 +149,8 @@ export function getProgress(taskDir: string): PipelineProgress {
     userStory: readJson(path.join(taskDir, 'user-story.json')) as Record<string, unknown> | null,
     plan: readJson(path.join(taskDir, 'plan-refined.json')),
     pipelineTasks: readJson(path.join(taskDir, 'pipeline-tasks.json')),
+    rcaSonnet: readJson(path.join(taskDir, 'rca-sonnet.json')) as Record<string, unknown> | null,
+    rcaOpus: readJson(path.join(taskDir, 'rca-opus.json')) as Record<string, unknown> | null,
     implResult: readJson(path.join(taskDir, 'impl-result.json')) as { status: string } | null,
     planReviewSonnet: readJson(path.join(taskDir, 'review-sonnet.json')) as PipelineProgress['planReviewSonnet'],
     planReviewOpus: readJson(path.join(taskDir, 'review-opus.json')) as PipelineProgress['planReviewOpus'],
@@ -157,12 +162,49 @@ export function getProgress(taskDir: string): PipelineProgress {
   };
 }
 
+// ─── Pipeline Type ───────────────────────────────────────────────────
+
+export type PipelineType = 'multi-ai' | 'bug-fix';
+
+/** Extract pipeline type from pipeline-tasks.json data */
+export function getPipelineType(pipelineTasks: unknown): PipelineType {
+  if (!pipelineTasks || typeof pipelineTasks !== 'object') return 'multi-ai';
+  const pt = (pipelineTasks as Record<string, unknown>).pipeline_type;
+  return pt === 'bug-fix' ? 'bug-fix' : 'multi-ai';
+}
+
 // ─── Phase Detection ────────────────────────────────────────────────
 
 /** Determine current phase from pipeline progress */
 export function determinePhase(progress: PipelineProgress): PhaseResult {
-  // No user story yet — check for team-based requirements sub-phases
+  const pipelineType = getPipelineType(progress.pipelineTasks);
+
+  // No user story yet
   if (!progress.userStory) {
+    // Bug-fix pipeline: RCA phases
+    if (pipelineType === 'bug-fix') {
+      const sonnetDone = !!progress.rcaSonnet;
+      const opusDone = !!progress.rcaOpus;
+      if (sonnetDone && opusDone) {
+        return {
+          phase: 'root_cause_analysis',
+          message: '**Phase: RCA Consolidation**\nBoth RCA analyses complete. Consolidate findings, write user-story.json + plan-refined.json.'
+        };
+      }
+      if (sonnetDone || opusDone) {
+        return {
+          phase: 'root_cause_analysis',
+          message: `**Phase: Root Cause Analysis**\nRCA in progress. Sonnet: ${sonnetDone ? 'done' : 'running'}, Opus: ${opusDone ? 'done' : 'running'}.`
+        };
+      }
+      // No RCA files yet — pipeline just started
+      return {
+        phase: 'root_cause_analysis',
+        message: '**Phase: Root Cause Analysis**\nRCA pending. Spawn root-cause-analyst (Sonnet + Opus) in parallel.'
+      };
+    }
+
+    // Multi-ai pipeline: team-based requirements sub-phases
     const hasAnyAnalysis = progress.analysisFiles.length > 0;
 
     if (hasAnyAnalysis) {
@@ -191,57 +233,68 @@ export function determinePhase(progress: PipelineProgress): PhaseResult {
 
   // No plan yet
   if (!progress.plan) {
+    if (pipelineType === 'bug-fix') {
+      return {
+        phase: 'plan_drafting',
+        message: '**Phase: Planning**\nConsolidation incomplete — write plan-refined.json from RCA findings.'
+      };
+    }
     return {
       phase: 'plan_drafting',
       message: '**Phase: Planning**\nUse planner agent (opus) to create plan-refined.json'
     };
   }
 
-  // Plan review chain
-  if (!progress.planReviewSonnet?.status) {
-    return {
-      phase: 'plan_review_sonnet',
-      message: '**Phase: Plan Review**\n→ Run Sonnet plan review (plan-reviewer agent, sonnet)'
-    };
-  }
-  if (progress.planReviewSonnet.status === 'needs_clarification') {
-    const questions = progress.planReviewSonnet.clarification_questions || [];
-    return {
-      phase: 'clarification_plan_sonnet',
-      message: `**Phase: Clarification Needed**\nSonnet needs clarification. Answer questions or use AskUserQuestion:\n${questions.map(q => `- ${q}`).join('\n')}`
-    };
-  }
-  if (progress.planReviewSonnet.status === 'needs_changes') {
-    return {
-      phase: 'fix_plan_sonnet',
-      message: '**Phase: Fix Plan**\nSonnet needs changes. Create fix + re-review tasks.'
-    };
+  // Plan review chain — bug-fix skips Sonnet/Opus, goes straight to Codex
+  if (pipelineType !== 'bug-fix') {
+    if (!progress.planReviewSonnet?.status) {
+      return {
+        phase: 'plan_review_sonnet',
+        message: '**Phase: Plan Review**\n→ Run Sonnet plan review (plan-reviewer agent, sonnet)'
+      };
+    }
+    if (progress.planReviewSonnet.status === 'needs_clarification') {
+      const questions = progress.planReviewSonnet.clarification_questions || [];
+      return {
+        phase: 'clarification_plan_sonnet',
+        message: `**Phase: Clarification Needed**\nSonnet needs clarification. Answer questions or use AskUserQuestion:\n${questions.map(q => `- ${q}`).join('\n')}`
+      };
+    }
+    if (progress.planReviewSonnet.status === 'needs_changes') {
+      return {
+        phase: 'fix_plan_sonnet',
+        message: '**Phase: Fix Plan**\nSonnet needs changes. Create fix + re-review tasks.'
+      };
+    }
+
+    if (!progress.planReviewOpus?.status) {
+      return {
+        phase: 'plan_review_opus',
+        message: '**Phase: Plan Review**\n→ Run Opus plan review (plan-reviewer agent, opus)'
+      };
+    }
+    if (progress.planReviewOpus.status === 'needs_clarification') {
+      const questions = progress.planReviewOpus.clarification_questions || [];
+      return {
+        phase: 'clarification_plan_opus',
+        message: `**Phase: Clarification Needed**\nOpus needs clarification. Answer questions or use AskUserQuestion:\n${questions.map(q => `- ${q}`).join('\n')}`
+      };
+    }
+    if (progress.planReviewOpus.status === 'needs_changes') {
+      return {
+        phase: 'fix_plan_opus',
+        message: '**Phase: Fix Plan**\nOpus needs changes. Create fix + re-review tasks.'
+      };
+    }
   }
 
-  if (!progress.planReviewOpus?.status) {
-    return {
-      phase: 'plan_review_opus',
-      message: '**Phase: Plan Review**\n→ Run Opus plan review (plan-reviewer agent, opus)'
-    };
-  }
-  if (progress.planReviewOpus.status === 'needs_clarification') {
-    const questions = progress.planReviewOpus.clarification_questions || [];
-    return {
-      phase: 'clarification_plan_opus',
-      message: `**Phase: Clarification Needed**\nOpus needs clarification. Answer questions or use AskUserQuestion:\n${questions.map(q => `- ${q}`).join('\n')}`
-    };
-  }
-  if (progress.planReviewOpus.status === 'needs_changes') {
-    return {
-      phase: 'fix_plan_opus',
-      message: '**Phase: Fix Plan**\nOpus needs changes. Create fix + re-review tasks.'
-    };
-  }
-
+  // Codex plan validation (both pipelines, different messages)
   if (!progress.planReviewCodex?.status) {
     return {
       phase: 'plan_review_codex',
-      message: '**Phase: Plan Review**\n→ Run Codex plan review (FINAL GATE - codex-reviewer agent)'
+      message: pipelineType === 'bug-fix'
+        ? '**Phase: RCA + Plan Validation**\n→ Run Codex validation of consolidated RCA and fix plan (codex-reviewer agent)'
+        : '**Phase: Plan Review**\n→ Run Codex plan review (FINAL GATE - codex-reviewer agent)'
     };
   }
   if (progress.planReviewCodex.status === 'needs_clarification') {

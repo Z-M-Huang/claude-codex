@@ -119,6 +119,123 @@ describe('orchestrator.ts determine_phase', () => {
   });
 });
 
+describe('bug-fix pipeline phases via orchestrator.ts phase', () => {
+  beforeEach(() => {
+    mkdirSync(TEST_TASK_DIR, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_PROJECT_DIR, { recursive: true, force: true });
+  });
+
+  test('returns root_cause_analysis at startup with pipeline_type bug-fix', () => {
+    writeFileSync(
+      join(TEST_TASK_DIR, 'pipeline-tasks.json'),
+      JSON.stringify({ pipeline_type: 'bug-fix', team_name: 'test' })
+    );
+    const phase = runDeterminePhase();
+    expect(phase).toBe('root_cause_analysis');
+  });
+
+  test('returns root_cause_analysis when one RCA file exists', () => {
+    writeFileSync(
+      join(TEST_TASK_DIR, 'pipeline-tasks.json'),
+      JSON.stringify({ pipeline_type: 'bug-fix', team_name: 'test' })
+    );
+    writeFileSync(
+      join(TEST_TASK_DIR, 'rca-sonnet.json'),
+      JSON.stringify({ root_cause: { summary: 'test' } })
+    );
+    const phase = runDeterminePhase();
+    expect(phase).toBe('root_cause_analysis');
+  });
+
+  test('returns plan_review_codex (not sonnet) after bug-fix consolidation', () => {
+    writeFileSync(
+      join(TEST_TASK_DIR, 'pipeline-tasks.json'),
+      JSON.stringify({ pipeline_type: 'bug-fix', team_name: 'test' })
+    );
+    writeFileSync(join(TEST_TASK_DIR, 'user-story.json'), JSON.stringify({ title: 'Fix: bug' }));
+    writeFileSync(join(TEST_TASK_DIR, 'plan-refined.json'), JSON.stringify({ steps: [] }));
+    const phase = runDeterminePhase();
+    expect(phase).toBe('plan_review_codex');
+  });
+
+  test('returns implementation after bug-fix Codex validation approved', () => {
+    writeFileSync(
+      join(TEST_TASK_DIR, 'pipeline-tasks.json'),
+      JSON.stringify({ pipeline_type: 'bug-fix', team_name: 'test' })
+    );
+    writeFileSync(join(TEST_TASK_DIR, 'user-story.json'), JSON.stringify({ title: 'Fix: bug' }));
+    writeFileSync(join(TEST_TASK_DIR, 'plan-refined.json'), JSON.stringify({ steps: [] }));
+    writeFileSync(join(TEST_TASK_DIR, 'review-codex.json'), JSON.stringify({ status: 'approved' }));
+    const phase = runDeterminePhase();
+    expect(phase).toBe('implementation');
+  });
+
+  test('bug-fix complete after all code reviews approved (no plan review sonnet/opus)', () => {
+    writeFileSync(
+      join(TEST_TASK_DIR, 'pipeline-tasks.json'),
+      JSON.stringify({ pipeline_type: 'bug-fix', team_name: 'test' })
+    );
+    writeFileSync(join(TEST_TASK_DIR, 'user-story.json'), JSON.stringify({ title: 'Fix: bug' }));
+    writeFileSync(join(TEST_TASK_DIR, 'plan-refined.json'), JSON.stringify({ steps: [] }));
+    // No review-sonnet.json or review-opus.json — bug-fix skips these
+    writeFileSync(join(TEST_TASK_DIR, 'review-codex.json'), JSON.stringify({ status: 'approved' }));
+    writeFileSync(join(TEST_TASK_DIR, 'impl-result.json'), JSON.stringify({ status: 'complete' }));
+    writeFileSync(join(TEST_TASK_DIR, 'code-review-sonnet.json'), JSON.stringify({ status: 'approved' }));
+    writeFileSync(join(TEST_TASK_DIR, 'code-review-opus.json'), JSON.stringify({ status: 'approved' }));
+    writeFileSync(join(TEST_TASK_DIR, 'code-review-codex.json'), JSON.stringify({ status: 'approved' }));
+    const phase = runDeterminePhase();
+    expect(phase).toBe('complete');
+  });
+});
+
+describe('bug-fix orchestrator status messaging', () => {
+  beforeEach(() => {
+    mkdirSync(TEST_TASK_DIR, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_PROJECT_DIR, { recursive: true, force: true });
+  });
+
+  function runStatus(): string {
+    const result = Bun.spawnSync(['bun', join(import.meta.dir, 'orchestrator.ts'), 'status'], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: TEST_PROJECT_DIR },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    return result.stdout.toString();
+  }
+
+  test('plan_review_codex status says RCA + Plan Validation for bug-fix', () => {
+    writeFileSync(
+      join(TEST_TASK_DIR, 'pipeline-tasks.json'),
+      JSON.stringify({ pipeline_type: 'bug-fix', team_name: 'test' })
+    );
+    writeFileSync(join(TEST_TASK_DIR, 'user-story.json'), JSON.stringify({ title: 'Fix: bug' }));
+    writeFileSync(join(TEST_TASK_DIR, 'plan-refined.json'), JSON.stringify({ steps: [] }));
+    const output = runStatus();
+    expect(output).toContain('RCA + Plan Validation');
+    expect(output).not.toContain('sonnet -> opus -> codex');
+  });
+
+  test('plan_review_codex status says sequential reviews for multi-ai', () => {
+    writeFileSync(
+      join(TEST_TASK_DIR, 'pipeline-tasks.json'),
+      JSON.stringify({ requirements: 'T1' })
+    );
+    writeFileSync(join(TEST_TASK_DIR, 'user-story.json'), JSON.stringify({ title: 'test' }));
+    writeFileSync(join(TEST_TASK_DIR, 'plan-refined.json'), JSON.stringify({ steps: [] }));
+    writeFileSync(join(TEST_TASK_DIR, 'review-sonnet.json'), JSON.stringify({ status: 'approved' }));
+    writeFileSync(join(TEST_TASK_DIR, 'review-opus.json'), JSON.stringify({ status: 'approved' }));
+    const output = runStatus();
+    expect(output).toContain('sequential plan reviews');
+    expect(output).not.toContain('RCA');
+  });
+});
+
 describe('path resolution and environment', () => {
   beforeEach(() => {
     mkdirSync(TEST_TASK_DIR, { recursive: true });
