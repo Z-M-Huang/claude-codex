@@ -1,5 +1,7 @@
 # Claude Codex Marketplace
 
+> **This project has moved to [VCP](https://github.com/Z-M-Huang/vcp).** Future development and improvements will continue at [Z-M-Huang/vcp/plugins/dev-buddy](https://github.com/Z-M-Huang/vcp/tree/main/plugins/dev-buddy). Please use the new repository going forward.
+
 ![Visitors](https://visitor-badge.laobi.icu/badge?page_id=Z-M-Huang.claude-codex&style=flat-square)
 ![GitHub release](https://img.shields.io/github/v/release/Z-M-Huang/claude-codex?style=flat-square)
 ![GitHub license](https://img.shields.io/github/license/Z-M-Huang/claude-codex?style=flat-square)
